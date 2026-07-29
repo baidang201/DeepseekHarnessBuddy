@@ -373,13 +373,40 @@ class BuddyAgent:
                 )
                 restrict_unix_socket(self.socket_path)
                 self._tasks = [
-                    asyncio.create_task(self._account_usage_loop()),
-                    asyncio.create_task(self._readonly_loop()),
-                    asyncio.create_task(self._ble_loop()),
-                    asyncio.create_task(self._keepalive_loop()),
+                    asyncio.create_task(
+                        self._account_usage_loop(), name="account-usage"
+                    ),
+                    asyncio.create_task(self._readonly_loop(), name="readonly"),
+                    asyncio.create_task(self._ble_loop(), name="ble"),
+                    asyncio.create_task(self._keepalive_loop(), name="keepalive"),
                 ]
+                for task in self._tasks:
+                    task.add_done_callback(lambda _: stopped.set())
                 await self._publish_state(force=True)
                 await stopped.wait()
+                failed = next(
+                    (task for task in self._tasks if task.done()),
+                    None,
+                )
+                if failed is not None and not self._stop_requested:
+                    if failed.cancelled():
+                        raise RuntimeError(
+                            "{} background task was cancelled".format(
+                                failed.get_name()
+                            )
+                        )
+                    try:
+                        failed.result()
+                    except Exception:
+                        _LOG.exception(
+                            "%s background task failed", failed.get_name()
+                        )
+                        raise
+                    raise RuntimeError(
+                        "{} background task exited unexpectedly".format(
+                            failed.get_name()
+                        )
+                    )
             finally:
                 try:
                     await self.shutdown()
@@ -403,7 +430,7 @@ class BuddyAgent:
         for task in self._tasks:
             task.cancel()
         for task in self._tasks:
-            with contextlib.suppress(asyncio.CancelledError):
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
         self._tasks = []
         for bridge in list(self._managed_sessions.values()):
@@ -579,29 +606,41 @@ class BuddyAgent:
 
     async def _readonly_loop(self) -> None:
         while not self._stop_requested:
+            if self._watcher is not None:
+                readonly = await asyncio.to_thread(
+                    self._watcher.poll,
+                    now=self.clock(),
+                )
+                self._apply_readonly_sessions(readonly)
+            if self._client_state_watcher is not None:
+                self._unread = self._client_state_watcher.poll(
+                    self._visible_thread_ids
+                )
             if self._watcher is not None or self._client_state_watcher is not None:
-                self._refresh_readonly_state()
                 await self._publish_state()
             await asyncio.sleep(self.readonly_poll_interval)
 
     def _refresh_readonly_state(self) -> None:
         if self._watcher is not None:
             readonly = self._watcher.poll(now=self.clock())
-            readonly_ids = {session.session_id for session in readonly}
-            for session in readonly:
-                previous = self._readonly_activity_seen.get(session.session_id)
-                if previous is None or session.last_activity_at > previous:
-                    self._activity_heartbeat.record(session.last_activity_at)
-                self._readonly_activity_seen[session.session_id] = session.last_activity_at
-            self._readonly_activity_seen = {
-                session_id: timestamp
-                for session_id, timestamp in self._readonly_activity_seen.items()
-                if session_id in readonly_ids
-            }
-            self._record_readonly_completions(readonly)
-            self.catalog.replace_readonly(readonly)
+            self._apply_readonly_sessions(readonly)
         if self._client_state_watcher is not None:
             self._unread = self._client_state_watcher.poll(self._visible_thread_ids)
+
+    def _apply_readonly_sessions(self, readonly: list[SessionRecord]) -> None:
+        readonly_ids = {session.session_id for session in readonly}
+        for session in readonly:
+            previous = self._readonly_activity_seen.get(session.session_id)
+            if previous is None or session.last_activity_at > previous:
+                self._activity_heartbeat.record(session.last_activity_at)
+            self._readonly_activity_seen[session.session_id] = session.last_activity_at
+        self._readonly_activity_seen = {
+            session_id: timestamp
+            for session_id, timestamp in self._readonly_activity_seen.items()
+            if session_id in readonly_ids
+        }
+        self._record_readonly_completions(readonly)
+        self.catalog.replace_readonly(readonly)
 
     async def _ble_loop(self) -> None:
         while not self._stop_requested:

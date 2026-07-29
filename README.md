@@ -131,6 +131,11 @@ Codex Desktop tasks are discovered read-only from local Codex session logs. They
 can update the dashboard, unread count, and completion chime, but Desktop
 approval requests are not proxied through the device.
 
+Large local session-log scans run outside the bridge's async event loop, so they
+cannot delay the 10-second BLE keepalive and accidentally trigger the device's
+30-second offline state. If a core bridge task exits unexpectedly, the agent
+exits cleanly and the existing launchd service restarts it.
+
 ## Controls
 
 |                         | Normal               | Pet         | Info        | Approval    |

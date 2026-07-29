@@ -1,6 +1,8 @@
 import asyncio
 import base64
 import hashlib
+import threading
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -582,6 +584,120 @@ def test_agent_constructs_after_closed_loop_and_runs_in_fresh_loop(tmp_path):
     asyncio.run(exercise())
 
     assert not agent.socket_path.exists()
+
+
+def test_agent_exits_when_a_core_background_task_fails(tmp_path):
+    class _EmptyWatcher:
+        def poll(self, now):
+            return []
+
+    class _EmptyClientStateWatcher:
+        def poll(self, visible_thread_ids=None):
+            return None
+
+    socket_path = Path(f"/tmp/code-buddy-failure-{id(tmp_path)}.sock")
+    agent = BuddyAgent(
+        tmp_path / "state.json",
+        socket_path=socket_path,
+        watcher=_EmptyWatcher(),
+        client_state_watcher=_EmptyClientStateWatcher(),
+        readonly_poll_interval=60.0,
+        keepalive_interval=60.0,
+        reconnect_interval=60.0,
+    )
+
+    keepalive_failed = asyncio.Event()
+
+    async def fail_keepalive():
+        keepalive_failed.set()
+        raise RuntimeError("keepalive exploded")
+
+    agent._keepalive_loop = fail_keepalive
+
+    async def exercise():
+        task = asyncio.create_task(agent.run())
+        try:
+            await asyncio.wait_for(keepalive_failed.wait(), timeout=2.0)
+            with pytest.raises(RuntimeError, match="keepalive exploded"):
+                await asyncio.wait_for(task, timeout=2.0)
+        finally:
+            if not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(exercise())
+
+    persisted = BridgeStateStore(agent.state_path).load()
+    assert persisted.agent_running is False
+    assert not agent.socket_path.exists()
+
+
+def test_slow_readonly_poll_does_not_block_keepalive(tmp_path):
+    class _BlockingWatcher:
+        def __init__(self):
+            self.started = threading.Event()
+            self.release = threading.Event()
+            self.released_at = None
+
+        def poll(self, now):
+            self.started.set()
+            self.release.wait(timeout=0.3)
+            self.released_at = time.monotonic()
+            return []
+
+    class _EmptyClientStateWatcher:
+        def poll(self, visible_thread_ids=None):
+            return None
+
+    class _TimestampingBle(_CapturingBle):
+        def __init__(self):
+            super().__init__()
+            self.sent_at = []
+            self.sent = asyncio.Event()
+
+        async def send_snapshot(self, snapshot) -> None:
+            self.sent_at.append(time.monotonic())
+            self.sent.set()
+            await super().send_snapshot(snapshot)
+
+    watcher = _BlockingWatcher()
+    agent = BuddyAgent(
+        tmp_path / "state.json",
+        watcher=watcher,
+        client_state_watcher=_EmptyClientStateWatcher(),
+        readonly_poll_interval=60.0,
+        keepalive_interval=0.01,
+        reconnect_interval=60.0,
+    )
+    ble = _TimestampingBle()
+    agent._ble = ble
+    agent._ble_connected = True
+
+    async def exercise():
+        readonly_task = asyncio.create_task(agent._readonly_loop())
+        keepalive_task = asyncio.create_task(agent._keepalive_loop())
+        try:
+            await asyncio.wait_for(
+                asyncio.to_thread(watcher.started.wait),
+                timeout=2.0,
+            )
+            await asyncio.wait_for(ble.sent.wait(), timeout=2.0)
+            return list(ble.sent_at), watcher.released_at
+        finally:
+            watcher.release.set()
+            agent._stop_requested = True
+            readonly_task.cancel()
+            keepalive_task.cancel()
+            await asyncio.gather(
+                readonly_task,
+                keepalive_task,
+                return_exceptions=True,
+            )
+
+    sent_at, released_at = asyncio.run(exercise())
+
+    assert sent_at
+    assert released_at is None
 
 
 def test_agent_rejects_wrong_uid_before_reading_a_command(tmp_path, monkeypatch):
