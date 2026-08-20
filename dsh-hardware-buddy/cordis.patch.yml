@@ -8,7 +8,11 @@
       baudRate: 115200
       approvalTimeout: 30000
       heartbeatIntervalMs: 3000
-      dangerousTools: []   # P0 probe 定稿后填入真实 dsh 工具名正则
+      dangerousTools:   # P0 定稿（25 个真实工具，全小写）
+        - '^bash$'
+        - '^write$'
+        - '^edit$'
+        - '^str_replace_editor$'
       excludedTools:
         - '^MCP__danger_.*'
       celebrateThreshold: 50000

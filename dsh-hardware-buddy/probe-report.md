@@ -28,7 +28,38 @@
 |B 键 → `{"cmd":"permission",...,"decision":"deny"}`|✅ 实证（t-005）；B 键在机身上边缘，非正面大键|
 |shake → dizzy 日志|⏳ 未触发（窗口内无人摇动；代码路径与按键同源，风险低）|
 
-## 3. 待完成 P0 项（需真实 dsh 环境）
+## 3. dsh 真机集成（2026-08-20 补充）
+
+环境：本机 deepseek-harness 源码仓（`node apps/cli/lib/bin.js`）、`headless` profile（`dsh plugin add` 本地 link 安装）、DEEPSEEK_API_KEY。
+
+### 3.1 真实工具清单（25 个，来自 request/header 事件，全小写）
+
+`bash` `create_goal` `edit` `exit_plan_mode` `get_goal` `glob` `grep` `interrupt_agent` `job_kill` `job_list` `job_output` `list_agents` `ralph` `read` `read_image` `send_message` `skill` `str_replace_editor` `subagent` `subagent_fork` `todo_write` `update_goal` `web_search` `workflow` `write`
+
+**dangerousTools 默认值定稿**：`^bash$` `^write$` `^edit$` `^str_replace_editor$`（写入/执行类）。v1.1 文档预填的 `Bash/Edit/Write`（首字母大写）不会命中任何真实工具名。
+
+### 3.2 集成中发现并修复的 bug
+
+|bug|症状|修复|
+|---|---|---|
+|macOS `tty.`/`cu.` 陷阱|`SerialPort.list()` 返回 `/dev/tty.usbmodem*`；打开 tty.* 会永久等待 DCD，open 静默挂起|`withCuPath()`：darwin 上映射为 `/dev/cu.*`|
+|open 竞态|`port.on('open')` 触发连接回调 → 立即 flush，但 `this.port` 在 `await open` 之后才赋值，首条心跳被 send() 静默丢弃|`this.port/parser` 赋值挪到 `port.open()` 之前|
+|插件日志不可见|dsh headless 抑制插件 logger 输出，info/warn 全部沉默|新增 `src/debug.ts`：`HB_DEBUG=1` 时 stderr 输出 CDC 生命周期追踪|
+
+### 3.3 已验证（真实 dsh 进程内）
+
+- 插件经 `dsh plugin add` 进入 profile 层栈，`--dump-config` 确认配置默认值生效（**dsh 源码零修改**）
+- `apply()` 执行、VID/PID 发现（303a:1001）、串口打开
+- **心跳双向闭环**：dsh 事件（`session/created` → total=1、`agent/status` → running=1）→ 插件心跳 → 设备解析 → 设备回显 `[data] snapshot total=1 running=1` → 插件接收
+- 断连文案 `"No DSH host"` 在运行间隔超时后生效（回显中可见）
+- `npm test` 35/35 保持全绿（修复后）
+
+### 3.4 当前阻塞
+
+- **AC4 全链路**（工具触发 → 设备审批 → A/B 决策 → dsh 继续）：被 `QUOTA: Insufficient Balance` 阻塞，需给 DeepSeek API key 充值后重跑
+- 设备屏幕渲染（IMU 方向解析门控）问题独立跟踪中，不影响协议链路
+
+## 4. 待完成 P0 项（需真实 dsh 环境）
 
 - [ ] runtime probe（`probe.ts`）：事件 payload 样例留档
 - [ ] 真实工具名清单 dump → 定稿 `dangerousTools` 默认正则

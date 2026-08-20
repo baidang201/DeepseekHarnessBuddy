@@ -2,6 +2,7 @@ import { SerialPort } from 'serialport';
 import { ReadlineParser } from '@serialport/parser-readline';
 import type { Config } from './config.js';
 import type { DeviceCommand, Heartbeat } from './protocol.js';
+import { dbg } from './debug.js';
 
 export interface CdcLogger {
   info: (m: string) => void;
@@ -73,8 +74,10 @@ export class CdcBridge {
     try {
       path = this.config.port ?? (await this.discoverPort());
     } catch (err) {
+      dbg(`[hb] discovery threw: ${(err as Error).stack ?? err}`);
       this.logger.warn(`port discovery failed: ${(err as Error).message}`);
     }
+    dbg(`[hb] tryConnect path=${path ?? 'none'}`);
 
     if (!path) {
       this.logger.warn('No StickS3 CDC port found, retry in 5s');
@@ -86,8 +89,15 @@ export class CdcBridge {
       const port = new SerialPort({ path, baudRate: this.config.baudRate, autoOpen: false });
       const parser = port.pipe(new ReadlineParser({ delimiter: '\n', encoding: 'utf8' }));
 
+      // Assign BEFORE open(): the 'open' event fires the connection callback,
+      // which flushes a heartbeat through send() — send() drops writes while
+      // this.port is null, so a late assignment would swallow that first beat.
+      this.port = port;
+      this.parser = parser;
+
       port.on('open', () => {
         this.connected = true;
+        dbg(`[hb] OPEN ok ${path}`);
         this.onConnectionChange(true);
         this.logger.info(`CDC connected on ${path}`);
       });
@@ -102,6 +112,7 @@ export class CdcBridge {
       parser.on('data', (line: string) => {
         const trimmed = line.trim();
         if (!trimmed) return;
+        dbg(`[hb] device line: ${trimmed.slice(0, 70)}`);
         try {
           this.onCommand(JSON.parse(trimmed) as DeviceCommand);
         } catch {
@@ -112,10 +123,8 @@ export class CdcBridge {
       await new Promise<void>((resolve, reject) =>
         port.open((err) => (err ? reject(err) : resolve())),
       );
-
-      this.port = port;
-      this.parser = parser;
     } catch (err) {
+      dbg(`[hb] connect error: ${(err as Error).stack ?? err}`);
       this.logger.error(`Failed to open ${path}: ${(err as Error).message}`);
       this.scheduleReconnect();
     }
@@ -136,6 +145,7 @@ export class CdcBridge {
    */
   private async discoverPort(): Promise<string | undefined> {
     const ports = await SerialPort.list();
+    dbg(`[hb] ports: ${ports.map((p) => `${p.path}|vid=${p.vendorId ?? '?'}|pid=${p.productId ?? '?'}`).join(' ; ')}`);
     const wantVid = this.config.vendorId.toLowerCase();
     const wantPid = this.config.productId?.toLowerCase();
 
@@ -143,8 +153,21 @@ export class CdcBridge {
       if (!p.vendorId || p.vendorId.toLowerCase() !== wantVid) return false;
       return !wantPid || p.productId?.toLowerCase() === wantPid;
     });
-    if (byVid) return byVid.path;
+    if (byVid) return withCuPath(byVid.path);
 
-    return ports.find((p) => /usbmodem|ttyacm/i.test(p.path))?.path;
+    return withCuPath(ports.find((p) => /usbmodem|ttyacm/i.test(p.path))?.path);
   }
+}
+
+/**
+ * macOS: SerialPort.list() reports the /dev/tty.* callout twin. Opening a
+ * tty.* device blocks until carrier detect, which a CDC device never asserts —
+ * the open silently hangs forever. The /dev/cu.* twin opens without waiting.
+ */
+function withCuPath(path: string | undefined): string | undefined {
+  if (path === undefined) return undefined;
+  if (process.platform === 'darwin' && path.startsWith('/dev/tty.')) {
+    return `/dev/cu.${path.slice('/dev/tty.'.length)}`;
+  }
+  return path;
 }

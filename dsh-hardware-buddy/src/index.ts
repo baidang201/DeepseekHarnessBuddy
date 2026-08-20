@@ -6,6 +6,7 @@ import { ApprovalBridge } from './approval.js';
 import { EventBridge } from './bridge.js';
 import { Config } from './config.js';
 import type { AppContext, Logger } from './context.js';
+import { dbg } from './debug.js';
 import type { DeviceCommand, Heartbeat } from './protocol.js';
 
 const requireResolve = createRequire(import.meta.url).resolve;
@@ -17,6 +18,7 @@ export const name = 'hardware-buddy';
 export const inject = ['tools', 'approval'];
 
 export function apply(ctx: Context, config: Config): void {
+  dbg('[hb] apply enter');
   const app = ctx as unknown as AppContext;
   const logger = app.logger('hardware-buddy') as Logger;
 

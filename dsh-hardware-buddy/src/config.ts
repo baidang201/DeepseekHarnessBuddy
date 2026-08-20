@@ -15,9 +15,9 @@ export interface Config {
 }
 
 // Schemastery config schema. Exposed through the dsh `cordis.patch.yml`
-// `config:` block (see §3.10). `dangerousTools` defaults empty on purpose:
-// the real dsh tool names are produced by the P0 probe before defaults are
-// finalized, so we never pre-fill Claude/Codex-style names.
+// `config:` block (see §3.10). `dangerousTools` defaults were finalized from
+// the P0 runtime dump (25 tools, all lowercase — see probe-report.md):
+// the write/execute class is bash / write / edit / str_replace_editor.
 export const Config = Schema.object({
   port: Schema.union([Schema.string(), Schema.const(null)])
     .default(null)
@@ -30,8 +30,12 @@ export const Config = Schema.object({
   approvalTimeout: Schema.number().default(30000).description('ms before an unanswered prompt auto-cancels'),
   heartbeatIntervalMs: Schema.number().default(3000)
     .description('full-snapshot interval; must be far below the device 30s heartbeat window'),
-  dangerousTools: Schema.array(Schema.string()).default([])
-    .description('regex list of tools routed to the hardware approval screen'),
+  dangerousTools: Schema.array(Schema.string()).default([
+    '^bash$',
+    '^write$',
+    '^edit$',
+    '^str_replace_editor$',
+  ]).description('regex list of tools routed to the hardware approval screen (P0-finalized)'),
   excludedTools: Schema.array(Schema.string()).default(['^MCP__danger_.*'])
     .description('regex list of tools routed to the dsh Web UI approval instead'),
   celebrateThreshold: Schema.number().default(50000)
