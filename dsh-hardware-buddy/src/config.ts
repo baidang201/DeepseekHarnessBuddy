@@ -12,6 +12,13 @@ export interface Config {
   celebrateThreshold: number;
   entriesLimit: number;
   logLevel: 'trace' | 'debug' | 'info' | 'warn' | 'error';
+  // P2-B / FR4: completion chime + 8s merge window
+  chimeEnabled: boolean;
+  chimeMinIntervalMs: number;
+  // P2-B / FR5: host time sync throttling — heartbeat carries time at most this often.
+  // FR5 brief says 60s. The plugin throttles to this value; the device is robust
+  // to anything from 1s..minutes (data.h:193-249 parses only valid ranges).
+  timeSyncIntervalMs: number;
 }
 
 // Schemastery config schema. Exposed through the dsh `cordis.patch.yml`
@@ -43,4 +50,10 @@ export const Config = Schema.object({
   entriesLimit: Schema.number().default(5)
     .description('max number of recent event summaries in the heartbeat entries[]'),
   logLevel: Schema.string().default('info'),
+  chimeEnabled: Schema.boolean().default(true)
+    .description('FR4: when true, turn/end bumps completion_seq so the device chimes'),
+  chimeMinIntervalMs: Schema.number().default(8000)
+    .description('FR4: merge window — do not bump completion_seq faster than this (ms)'),
+  timeSyncIntervalMs: Schema.number().default(60000)
+    .description('FR5: heartbeat carries time at most every N ms; brief defaults to 60s'),
 });
