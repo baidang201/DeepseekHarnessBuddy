@@ -29,7 +29,11 @@ export interface Heartbeat {
   activity20?: number; // uint32, low-20-bits (firmware校验 data.h:290-298)
   token20v1?: string; // base64url 86 chars (token_heartbeat_logic.h:7-10)
   usage?: HeartbeatUsage;
-  completion_seq?: number;
+  completion_seq?: number; // uint32 — bridge bumps on turn/end, device chimes (FR4)
+  error_seq?: number;     // P2-B: bridge bumps on tool/result.error → device plays Error voice
+  time?: [number, number]; // P2-B: [epoch_sec, tz_offset_sec]; throttled to ≤ 60s (FR5);
+                            // signed int32 epoch_sec arrives < UINT32 by epochInRange check
+                            // on the firmware side (data.h:193-249)
   unread?: number;
   prompt?: HeartbeatPrompt;
 }

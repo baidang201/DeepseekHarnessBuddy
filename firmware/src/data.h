@@ -25,6 +25,10 @@ struct TamaState {
   bool     recentlyCompleted;
   bool     hasCompletionSeq;
   uint32_t completionSeq;
+  // P2-B: tool-error counter (mirrors completion_seq). Bridge increments
+  // on tool/result.error; main.cpp observes and fires playClip(Error).
+  bool     hasErrorSeq;
+  uint32_t errorSeq;
   bool     hasActivity20;
   uint32_t activity20;
   uint32_t activity20ReceivedAt;
@@ -294,6 +298,12 @@ static void _applyJson(const char* line, TamaState* out, bool trustedTransport) 
   if (completionSeq.is<uint32_t>() && !completionSeq.is<bool>()) {
     out->hasCompletionSeq = true;
     out->completionSeq = completionSeq.as<uint32_t>();
+  }
+  // P2-B: error_seq, same uint32+!bool pattern as completion_seq (above).
+  JsonVariantConst errorSeq = doc["error_seq"];
+  if (errorSeq.is<uint32_t>() && !errorSeq.is<bool>()) {
+    out->hasErrorSeq = true;
+    out->errorSeq = errorSeq.as<uint32_t>();
   }
   JsonVariantConst activity20 = doc["activity20"];
   if (activity20.is<uint32_t>() && !activity20.is<bool>()) {
