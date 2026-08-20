@@ -110,7 +110,7 @@
 |agent 运行状态|`agent/status`（`runtime-types.ts:178`）|`running`|payload 为 `{ agent, status }`，`status: 'idle' \| 'running'` 双向流转，两个方向都要处理|
 |等待审批的工具调用|`approval/request` waterfall（`user-approval/src/index.ts:30`）|`waiting`|见 FR3|
 |会话事件摘要|`session/event`（`session/src/index.ts:76`，签名 `(session, event)`）过滤 `event.type === 'tool/result'` / `assistant/message`|`entries[]`（≤5 条）|摘要**从 `event.message`（`ToolResultMessage` / `AssistantMessage`）提取**；事件上不存在 `summary` 字段|
-|token 累计|`session/event` 过滤 `event.type === 'assistant/message'`（其 `usage?: TokenUsage`）；可辅以 `assistant/chunk` 且 `chunk.type === 'usage'`|`tokens`、`tokens_today`|`TokenUsage` 字段为 camelCase `inputTokens`/`outputTokens`（+ 可选 cache/reasoning 字段），见 `packages/llm/llm/src/types.ts:135-141`|
+|token 累计|`session/event` 过滤 `event.type === 'assistant/chunk'` 且 `chunk.type === 'usage'`（**live 唯一来源**；落盘的 `assistant/message.usage` 是持久化补写，live emit 不带）；⚠️ live 载荷带信封 `{type,seq,time,data}`，业务字段在 `ev.data`|`tokens`、`tokens_today`|`TokenUsage` 字段为 camelCase `inputTokens`/`outputTokens`（+ 可选 cache/reasoning 字段），见 `packages/llm/llm/src/types.ts:135-141`；计数为全量消耗（input+output+cacheRead+cacheWrite+reasoning）|
 |token 强度可视化|本地按 20s 窗口聚合|`activity20`（uint32, low-20-bit rolling，固件校验在 `data.h:290-298`）、`token20v1`（base64url 86 字节，64 bin × 20s，`token_heartbeat_logic.h:7-10`）||
 |配额（stretch）|待定（dsh 无现成配额服务）|`usage = { five_hour_remaining, seven_day_remaining }`|数值 0-1；数据源待调研，S5/AC10 为 stretch 验收；**字段命名保留原样**（国内接口普遍存在 5 小时滚动窗口限额，语义兼容）|
 |celebrate 触发|本地累计 tokens ≥ `celebrateThreshold`|`msg`|默认 50 000（可配）|

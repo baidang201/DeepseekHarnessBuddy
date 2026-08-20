@@ -44,6 +44,8 @@
 |---|---|---|
 |macOS `tty.`/`cu.` 陷阱|`SerialPort.list()` 返回 `/dev/tty.usbmodem*`；打开 tty.* 会永久等待 DCD，open 静默挂起|`withCuPath()`：darwin 上映射为 `/dev/cu.*`|
 |open 竞态|`port.on('open')` 触发连接回调 → 立即 flush，但 `this.port` 在 `await open` 之后才赋值，首条心跳被 send() 静默丢弃|`this.port/parser` 赋值挪到 `port.open()` 之前|
+|**token 计数恒为零**|live `session/event` 载荷带信封 `{type,seq,time,data}`，且 usage 只在 `assistant/chunk`（`chunk.type==='usage'`）上；原实现读 `assistant/message` 的 `ev.usage`（live 恒为空，落盘才有——单测用拆信封形状所以全绿）|归一化 `ev.data ?? ev`；usage 主通道改 chunk，message usage 留兜底；计数含 cache/reasoning 全量|
+|celebrate msg 永久驻留|`state.msg='milestone!'` 触发后从不清除，一直占设备状态栏|flush 发送一次后清空|
 |插件日志不可见|dsh headless 抑制插件 logger 输出，info/warn 全部沉默|新增 `src/debug.ts`：`HB_DEBUG=1` 时 stderr 输出 CDC 生命周期追踪|
 
 ### 3.3 已验证（真实 dsh 进程内）
