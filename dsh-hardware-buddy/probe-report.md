@@ -62,9 +62,26 @@
 
 使用提示（写进 README 即可）：**开机后先把设备拿起来一下**，屏幕即激活。可选 Backlog：冷启动 N 秒后回退默认竖屏。
 
-### 3.5 当前阻塞
+### 3.5 AC4 全链路验证通过（2026-08-20，deepseek-v4-flash）
 
-- **AC4 全链路**（工具触发 → 设备审批 → A/B 决策 → dsh 继续）：被 `QUOTA: Insufficient Balance` 阻塞，需给 DeepSeek API key 充值后重跑
+任务："用 write 工具创建 /tmp/dsh_buddy_test.txt"。实际运行轨迹（串口留痕）：
+
+```
+[prompt] show id=call_00_KG9V2UPF... tool=write   ← 第 1 次审批（30s 无人按 → 超时 cancelled → dsh deny）
+[prompt] show id=call_00_xGh1BDCP... tool=write   ← 模型重试，第 2 次审批（又超时）
+[prompt] show id=call_00_mO9zzOnV... tool=write   ← 模型再重试
+[prompt] approve id=call_00_mO9zzOnV...            ← 用户短按 A
+{"cmd":"permission","id":"call_00_mO9z...","decision":"once"}   ← 设备回包
+[data] snapshot ... waiting=0                     ← 审批解除
+文件写入成功（hello from dsh），任务输出 done，exit 0
+```
+
+单轮覆盖：**AC3**（total/running/waiting 全程随真实事件流转）、**AC4**（物理审批闭环：pre-execute 命中 → 审批屏 → A 键 → once → allowed-once → 工具放行）、**AC7**（超时 → cancelled → dsh deny with reason → 模型自动重试，走了两遍）。
+
+### 3.6 遗留
+
+- AC5 拔插重连、AC6 危险工具走 Web UI、AC8 HMR 配置热更：尚未做有针对性的人肉用例（机制已有单测覆盖）
+- AC10 配额显示：stretch（数据源待定）
 - 设备屏幕渲染（IMU 方向解析门控）问题独立跟踪中，不影响协议链路
 
 ## 4. 待完成 P0 项（需真实 dsh 环境）
