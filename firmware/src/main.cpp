@@ -17,6 +17,7 @@
 #include "fonts/jetbrains_mono_ascii_8.h"
 #include "landscape_dashboard_logic.h"
 #include "completion_chime_logic.h"
+#include "gesture_recognizer.h"
 #include "data.h"
 #include "persona_logic.h"
 #include "utf8_text_logic.h"
@@ -2252,6 +2253,92 @@ void setup() {
   if (IDLE_VOICE_ENABLED) nextIdleVoiceMs = millis() + IDLE_VOICE_MIN_MS;
 }
 
+// Shared approval resolution — used by both the A/B buttons and the
+// air-gesture gate so every input path behaves identically.
+static void approvePendingPrompt() {
+  char cmd[96];
+  snprintf(cmd, sizeof(cmd), "{\"cmd\":\"permission\",\"id\":\"%s\",\"decision\":\"once\"}", tama.promptId);
+  Serial.printf("[prompt] approve id=%s\n", tama.promptId);
+  sendCmd(cmd);
+  responseSent = true;
+  uint32_t tookS = (millis() - promptArrivedMs) / 1000;
+  statsOnApproval(tookS);
+  playClip(Clip::Approve);
+  if (tookS < 5) triggerOneShot(P_HEART, 2000);
+}
+
+static void denyPendingPrompt() {
+  char cmd[96];
+  snprintf(cmd, sizeof(cmd), "{\"cmd\":\"permission\",\"id\":\"%s\",\"decision\":\"deny\"}", tama.promptId);
+  Serial.printf("[prompt] deny id=%s\n", tama.promptId);
+  sendCmd(cmd);
+  responseSent = true;
+  statsOnDenial();
+  playClip(Clip::Deny);
+}
+
+// Air-gesture classifier gate (P2-A). Active ONLY while an approval is
+// pending: samples the gravity-subtracted accelerometer XY trace into a
+// ~900ms sliding window and consults gestureClassify() once the window
+// spans >= 700ms. Suppressed while the device lies flat on the desk
+// (gravity ~1g on Z) and locked for 1.5s after any recognition.
+static void gesturePoll(uint32_t now, bool inPrompt, bool interactionAllowed) {
+  static GesturePoint pts[128];
+  static uint8_t n = 0;
+  static uint32_t lockUntilMs = 0;
+  static float baseX = 0, baseY = 0, baseZ = 0;
+  static bool baseInit = false;
+
+  if (!inPrompt || !interactionAllowed) {
+    n = 0;
+    return;
+  }
+  if ((int32_t)(now - lockUntilMs) < 0) return;
+
+  float ax, ay, az;
+  M5.Imu.getAccelData(&ax, &ay, &az);
+  if (!baseInit) { baseX = ax; baseY = ay; baseZ = az; baseInit = true; }
+  // Slow EMA gravity baseline; hand-drawn gestures sit well above it.
+  baseX += (ax - baseX) * 0.02f;
+  baseY += (ay - baseY) * 0.02f;
+  baseZ += (az - baseZ) * 0.02f;
+
+  // Flat-on-desk suppression: gravity almost fully on Z means not held.
+  if (fabsf(baseZ) > 0.90f) {
+    n = 0;
+    return;
+  }
+
+  if (n < sizeof(pts) / sizeof(pts[0])) {
+    pts[n].x = ax - baseX;
+    pts[n].y = ay - baseY;
+    pts[n].tMs = now;
+    n++;
+  }
+  // Slide the window: drop samples older than 900ms.
+  uint8_t stale = 0;
+  while (stale < n && now - pts[stale].tMs > 900) stale++;
+  if (stale > 0) {
+    memmove(pts, pts + stale, (n - stale) * sizeof(pts[0]));
+    n -= stale;
+  }
+
+  if (n >= 16 && now - pts[0].tMs >= 700) {
+    Gesture g = gestureClassify(pts, n);
+    if (g != Gesture::None) {
+      lockUntilMs = now + 1500;
+      n = 0;
+      if (g == Gesture::Circle) {
+        Serial.println("[gesture] circle -> approve");
+        approvePendingPrompt();
+      } else {
+        Serial.println("[gesture] cross -> deny");
+        denyPendingPrompt();
+      }
+    }
+  }
+}
+
 void loop() {
   // First safe point: timeouts and previously latched failures win before any
   // normal application work. A rollback path never returns.
@@ -2330,6 +2417,12 @@ void loop() {
       Serial.println("shake: dizzy");
     }
   }
+
+  // Air-gesture approval (P2-A): circle = approve, cross = deny.
+  // Shares the exact approve/deny paths with the A/B buttons.
+  // inPrompt is computed further down in this loop pass; pass the local
+  // predicate by reaching back to tama so we can sample before that.
+  gesturePoll(now, tama.promptId[0] && !responseSent, !menuOpen && !screenOff);
 
   // BtnA: step through fake scenarios
   // Prompt arrival: beep, reset response flag
@@ -2533,15 +2626,7 @@ void loop() {
   if (M5.BtnA.wasReleased()) {
     if (!btnALong && !swallowBtnA) {
       if (inPrompt) {
-        char cmd[96];
-        snprintf(cmd, sizeof(cmd), "{\"cmd\":\"permission\",\"id\":\"%s\",\"decision\":\"once\"}", tama.promptId);
-        Serial.printf("[prompt] approve id=%s\n", tama.promptId);
-        sendCmd(cmd);
-        responseSent = true;
-        uint32_t tookS = (millis() - promptArrivedMs) / 1000;
-        statsOnApproval(tookS);
-        playClip(Clip::Approve);
-        if (tookS < 5) triggerOneShot(P_HEART, 2000);
+        approvePendingPrompt();
       } else if (otaCompactOverlay) {
         // Automatic OTA is informational; A does not change the transaction.
       } else if (otaReceiveScreen) {
@@ -2580,13 +2665,7 @@ void loop() {
     if (swallowBtnB) { swallowBtnB = false; }
     else
     if (inPrompt) {
-      char cmd[96];
-      snprintf(cmd, sizeof(cmd), "{\"cmd\":\"permission\",\"id\":\"%s\",\"decision\":\"deny\"}", tama.promptId);
-      Serial.printf("[prompt] deny id=%s\n", tama.promptId);
-      sendCmd(cmd);
-      responseSent = true;
-      statsOnDenial();
-      playClip(Clip::Deny);
+      denyPendingPrompt();
     } else if (otaCompactOverlay) {
       beep(600, 40);
       if (otaUpdateView().cancellable) otaUpdateCancel();
