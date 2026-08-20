@@ -1,12 +1,15 @@
 import type { AppContext } from './context.js';
 import type { Config } from './config.js';
-import type { Heartbeat } from './protocol.js';
+import type { Heartbeat, HeartbeatPrompt } from './protocol.js';
 import { trimHeartbeat } from './protocol.js';
 import { dbg } from './debug.js';
 
 interface BridgeState {
   total: number; // session-only count (avoid agent+session double counting)
   running: number;
+  waiting: number; // pending hardware approvals (state-based, carried every flush)
+  prompt?: HeartbeatPrompt; // pending approval screen; carried EVERY flush —
+  // the firmware clears the screen when a heartbeat omits the field
   entries: string[];
   tokens: number; // process-lifetime cumulative; reset on restart/HMR
   tokensToday: number; // "process alive" cumulative, not calendar day
@@ -33,6 +36,7 @@ export class EventBridge {
     this.state = {
       total: 0,
       running: 0,
+      waiting: 0,
       entries: [],
       tokens: 0,
       tokensToday: 0,
@@ -112,11 +116,22 @@ export class EventBridge {
     return () => this.disposers.forEach((d) => d());
   }
 
+  /** Set/clear the pending approval screen (carried by every flush). */
+  setPendingPrompt(prompt: HeartbeatPrompt | undefined): void {
+    this.state.prompt = prompt;
+  }
+
+  setPendingWaiting(count: number): void {
+    this.state.waiting = count;
+  }
+
   /** Push a full snapshot now (called on reconnect and on demand). */
   flush(): void {
     const hb: Heartbeat = {
       total: this.state.total,
       running: this.state.running,
+      waiting: this.state.waiting,
+      prompt: this.state.prompt,
       entries: [...this.state.entries],
       tokens: this.state.tokens,
       tokens_today: this.state.tokensToday,

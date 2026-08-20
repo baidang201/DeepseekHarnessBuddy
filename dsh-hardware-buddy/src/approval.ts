@@ -52,8 +52,9 @@ export class ApprovalBridge {
   constructor(
     private readonly config: Config,
     private readonly cdcOnline: () => boolean,
-    private readonly sendPrompt: (id: string, tool: string, hint: string) => boolean,
-    private readonly sendWaiting: (count: number) => void,
+    private readonly showPrompt: (id: string, tool: string, hint: string) => void,
+    private readonly clearPrompt: () => void,
+    private readonly setWaiting: (count: number) => void,
     private readonly logger: ApprovalLogger,
   ) {
     // FR7: a bad regex must not crash the plugin — warn and skip the rule.
@@ -153,7 +154,8 @@ export class ApprovalBridge {
           done = true;
           if (timer) clearTimeout(timer);
           this.pending.delete(id);
-          this.sendWaiting(this.pending.size);
+          this.clearPrompt();
+          this.setWaiting(this.pending.size);
           resolve(outcome);
         };
 
@@ -168,8 +170,8 @@ export class ApprovalBridge {
         }
 
         this.pending.set(id, { tool, settle });
-        this.sendWaiting(this.pending.size);
-        this.sendPrompt(id, tool, hint);
+        this.setWaiting(this.pending.size);
+        this.showPrompt(id, tool, hint);
       });
     } catch (e) {
       this.logger.warn(`approval handler error, falling through: ${(e as Error).message}`);

@@ -51,8 +51,26 @@ export function apply(ctx: Context, config: Config): void {
   const approval = new ApprovalBridge(
     config,
     () => cdcRef.isConnected,
-    (id, tool, hint) => cdcRef.send({ waiting: 1, prompt: { id, tool, hint } }),
-    (count) => cdcRef.send({ waiting: count }),
+    // The approval prompt is STATE, not an edge: the firmware clears the
+    // approval screen when a heartbeat omits the prompt field (data.h treats
+    // an absent key as "no pending prompt"). Route it through the heartbeat
+    // state machine so every flush re-carries it until settled.
+    (id, tool, hint) => {
+      dbg(`[hb] showPrompt cb id=${id} bridge=${bridge === null ? 'NULL' : 'ok'}`);
+      bridge?.setPendingPrompt({ id, tool, hint });
+      bridge?.setPendingWaiting(1);
+      bridge?.flush();
+    },
+    () => {
+      dbg('[hb] clearPrompt cb');
+      bridge?.setPendingPrompt(undefined);
+      bridge?.flush();
+    },
+    (count) => {
+      dbg(`[hb] setWaiting cb count=${count}`);
+      bridge?.setPendingWaiting(count);
+      bridge?.flush();
+    },
     logger,
   );
 

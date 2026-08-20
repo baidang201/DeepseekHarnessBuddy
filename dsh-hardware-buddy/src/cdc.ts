@@ -4,6 +4,9 @@ import type { Config } from './config.js';
 import type { DeviceCommand, Heartbeat } from './protocol.js';
 import { dbg } from './debug.js';
 
+/** Min spacing between physical CDC writes (back-to-back lines merge on RX). */
+const WRITE_COALESCE_MS = 60;
+
 export interface CdcLogger {
   info: (m: string) => void;
   warn: (m: string) => void;
@@ -24,6 +27,9 @@ export class CdcBridge {
   private connected = false;
   private shouldRun = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingLine: string | null = null;
+  private writeTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastWriteMs = 0;
 
   constructor(
     private readonly config: Config,
@@ -43,6 +49,11 @@ export class CdcBridge {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    if (this.writeTimer) {
+      clearTimeout(this.writeTimer);
+      this.writeTimer = null;
+    }
+    this.pendingLine = null;
     const port = this.port;
     this.port = null;
     this.parser = null;
@@ -56,15 +67,41 @@ export class CdcBridge {
     return this.connected;
   }
 
-  /** Write a heartbeat. Returns false (silent drop) when not connected. */
+  /** Write a heartbeat. Returns false (silent drop) when not connected.
+   *
+   * Writes are COALESCED: back-to-back heartbeats (e.g. a waiting-count bump
+   * immediately followed by a prompt push) arrive at the device's USB-CDC RX
+   * merged into one malformed line — the newlines are lost and the payload is
+   * dropped ("json malformed len=367", live-verified). The wire protocol is
+   * state-based full snapshots, so within a 60ms window only the LATEST
+   * snapshot is written, as a single line.
+   */
   send(hb: Heartbeat): boolean {
     if (!this.connected || !this.port?.isOpen) return false;
+    this.pendingLine = JSON.stringify(hb) + '\n';
+    if (this.writeTimer) return true;
+    const wait = Math.max(0, WRITE_COALESCE_MS - (Date.now() - this.lastWriteMs));
+    if (wait === 0) {
+      this.flushWrite();
+      return true;
+    }
+    this.writeTimer = setTimeout(() => {
+      this.writeTimer = null;
+      this.flushWrite();
+    }, wait);
+    return true;
+  }
+
+  private flushWrite(): void {
+    const line = this.pendingLine;
+    this.pendingLine = null;
+    if (!line || !this.port?.isOpen) return;
+    this.lastWriteMs = Date.now();
+    dbg(`[hb] write ${line.length}B`);
     try {
-      const ok = this.port.write(JSON.stringify(hb) + '\n');
-      return ok !== false;
+      this.port.write(line);
     } catch {
       // write can throw if the handle is mid-teardown; never crash the plugin
-      return false;
     }
   }
 
@@ -116,7 +153,11 @@ export class CdcBridge {
         try {
           this.onCommand(JSON.parse(trimmed) as DeviceCommand);
         } catch {
-          this.logger.warn(`Failed to parse device line: ${trimmed.slice(0, 80)}`);
+          try {
+            // Hardened: a throwing/slow host logger inside this serial-data
+            // handler must never take down the event loop (freeze defense).
+            this.logger.warn(`Failed to parse device line: ${trimmed.slice(0, 80)}`);
+          } catch { /* logger is best-effort */ }
         }
       });
 

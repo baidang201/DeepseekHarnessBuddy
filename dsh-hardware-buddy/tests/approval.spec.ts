@@ -24,6 +24,7 @@ interface Harness {
   bridge: ApprovalBridge;
   cdcOnline: ReturnType<typeof vi.fn>;
   sentPrompts: { id: string; tool: string; hint: string }[];
+  clearedPrompts: number;
   sentWaiting: number[];
   logs: { level: string; msg: string }[];
 }
@@ -32,13 +33,16 @@ function makeHarness(config: Config): Harness {
   const sentPrompts: { id: string; tool: string; hint: string }[] = [];
   const sentWaiting: number[] = [];
   const logs: { level: string; msg: string }[] = [];
+  let clearedPrompts = 0;
   const cdcOnline = vi.fn(() => true);
   const bridge = new ApprovalBridge(
     config,
     cdcOnline,
     (id, tool, hint) => {
       sentPrompts.push({ id, tool, hint });
-      return true;
+    },
+    () => {
+      clearedPrompts += 1;
     },
     (c) => sentWaiting.push(c),
     {
@@ -46,7 +50,7 @@ function makeHarness(config: Config): Harness {
       warn: (m) => logs.push({ level: 'warn', msg: m }),
     },
   );
-  return { bridge, cdcOnline, sentPrompts, sentWaiting, logs };
+  return { bridge, cdcOnline, sentPrompts, clearedPrompts, sentWaiting, logs };
 }
 
 afterEach(() => {

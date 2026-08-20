@@ -118,4 +118,30 @@ describe('EventBridge', () => {
     expect(sent.length).toBe(1);
     expect(sent.at(-1)!.running).toBe(1);
   });
+
+  // Regression (live-verified): the firmware CLEARS the approval screen when a
+  // heartbeat omits the prompt field (data.h: absent key => promptId[0]=0).
+  // The pending prompt is state — every flush must re-carry it until cleared.
+  it('flush carries the pending prompt and waiting count until cleared', () => {
+    const { ctx } = makeCtx();
+    const sent: Heartbeat[] = [];
+    const bridge = new EventBridge(ctx, makeConfig(), (hb) => sent.push(hb));
+    bridge.attach();
+
+    bridge.setPendingPrompt({ id: 'call_1', tool: 'bash', hint: 'echo hi' });
+    bridge.setPendingWaiting(1);
+    bridge.flush();
+    bridge.flush();
+    bridge.flush();
+    for (const hb of sent.slice(-3)) {
+      expect(hb.prompt).toEqual({ id: 'call_1', tool: 'bash', hint: 'echo hi' });
+      expect(hb.waiting).toBe(1);
+    }
+
+    bridge.setPendingPrompt(undefined);
+    bridge.setPendingWaiting(0);
+    bridge.flush();
+    expect(sent.at(-1)!.prompt).toBeUndefined();
+    expect(sent.at(-1)!.waiting).toBe(0);
+  });
 });
