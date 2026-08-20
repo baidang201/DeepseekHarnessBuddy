@@ -165,7 +165,11 @@ static void _applyJson(const char* line, TamaState* out, bool trustedTransport) 
             signatureUrl,
             CODE_BUDDY_FIRMWARE_VERSION,
             millis(),
+#if CODE_BUDDY_BLE_ENABLED
             bleConnected(),
+#else
+            false,
+#endif
             promptConflict,
             xferActive(),
             wifiManagerUiActive(),
@@ -215,7 +219,11 @@ static void _applyJson(const char* line, TamaState* out, bool trustedTransport) 
             &_otaAuthorizationReplay,
             CODE_BUDDY_FIRMWARE_VERSION,
             millis(),
+#if CODE_BUDDY_BLE_ENABLED
             bleConnected(),
+#else
+            false,
+#endif
             promptConflict,
             xferActive(),
             wifiManagerUiActive(),
@@ -348,7 +356,11 @@ static void _applyJson(const char* line, TamaState* out, bool trustedTransport) 
   otaOfferLifecyclePoll(
     &out->otaOffer,
     millis(),
+#if CODE_BUDDY_BLE_ENABLED
     bleConnected(),
+#else
+    false,
+#endif
     out->promptId[0] != 0,
     xferActive(),
     wifiManagerUiActive()
@@ -397,27 +409,16 @@ inline void dataPoll(TamaState* out) {
   }
 
   _usbLine.feed(Serial, out, true);
-  // BLE ring buffer is drained manually since it's not a Stream.
-  while (bleAvailable()) {
-    int c = bleRead();
-    if (c < 0) break;
-    _lastBtByteMs = millis();
-    if (c == '\n' || c == '\r') {
-      if (_btLine.len > 0) {
-        _btLine.buf[_btLine.len] = 0;
-        if (_btLine.buf[0] == '{') _applyJson(_btLine.buf, out, bleSecure());
-        _btLine.len = 0;
-      }
-    } else if (_btLine.len < sizeof(_btLine.buf) - 1) {
-      _btLine.buf[_btLine.len++] = (char)c;
-    }
-  }
 
   out->connected = dataConnected();
   otaOfferLifecyclePoll(
     &out->otaOffer,
     now,
+#if CODE_BUDDY_BLE_ENABLED
     out->connected && bleConnected(),
+#else
+    out->connected,
+#endif
     out->promptId[0] != 0,
     xferActive(),
     wifiManagerUiActive()
@@ -426,6 +427,6 @@ inline void dataPoll(TamaState* out) {
     out->sessionsTotal=0; out->sessionsRunning=0; out->sessionsWaiting=0;
     out->recentlyCompleted=false; out->lastUpdated=now;
     out->hasActivity20=false; out->activity20=0; out->activity20ReceivedAt=now;
-    utf8CopyTruncate(out->msg, "No Codex connected");
+    utf8CopyTruncate(out->msg, "No DSH host");
   }
 }
