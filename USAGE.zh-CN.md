@@ -9,12 +9,16 @@
 ## 1. 五分钟快速体验
 
 ```bash
-# 1. 设备插上 USB-C（屏幕没反应？先拿起设备竖一下激活屏幕，见 §6）
-# 2. 进入 dsh 源码目录，带上 API key
+# 0. 设备插上 USB-C（屏幕没反应？先拿起设备竖一下激活屏幕，见 §6）
+# 1. 进入 dsh 源码目录，带上 API key
 cd ~/Documents/GitHub.nosync/deepseek-harness
 export DEEPSEEK_API_KEY=<你的 key>
 
-# 3. 跑一个会触发危险工具的任务
+# 2. 启动 Web 版（浏览器界面，日常主入口）
+node apps/cli/lib/bin.js web
+#    → 打开 http://127.0.0.1:3080，在网页里发任务即可
+
+# 3. 或跑一条单次任务（无界面，适合脚本/测试）
 node apps/cli/lib/bin.js --profile headless "用 bash 工具执行 echo hello，然后告诉我输出"
 ```
 
@@ -25,40 +29,42 @@ node apps/cli/lib/bin.js --profile headless "用 bash 工具执行 echo hello，
 3. **短按 A**（正面大按钮）→ 命令执行，宠物比心；**短按 B**（机身上边缘小键）→ 拒绝执行
 4. 30 秒不按 → 自动拒绝（模型会收到"审批超时"）
 5. 任务结束 → 宠物回 idle；累计 token 过 5 万 → 庆祝动画
-6. dsh 进程退出 30 秒后 → 宠物睡觉
+6. Web 版进程退出 30 秒后 → 宠物睡觉；**拔掉设备时审批自动改在浏览器里弹**（Web UI 接管），插回又回到硬件
 
 ---
 
 ## 2. 启动方式汇总
 
-### 2.1 标准启动（headless 单任务）
+### 2.1 Web 版（日常主入口）
 
 ```bash
 cd ~/Documents/GitHub.nosync/deepseek-harness
 export DEEPSEEK_API_KEY=<key>
+node apps/cli/lib/bin.js web          # 打开 http://127.0.0.1:3080
+```
+
+- 浏览器里发任务、看会话；**设备在线时审批走硬件**（滴声 + 屏幕 + A/B 键），**设备拔掉时审批自动弹在浏览器里**——同一套白名单
+- 也可以用 npm 发布版跑（与本机源码同版本 0.1.0-rc.7，共用 `~/.dsh` 的 profile）：
+
+```bash
+npx @deepseek-ai/dsh web
+```
+
+### 2.2 headless 单任务（脚本/测试）
+
+```bash
 node apps/cli/lib/bin.js --profile headless "任务描述"
 ```
 
-- 任务完成后进程自动退出（one-shot 模式），宠物随后入睡
-- 默认模型 `deepseek-v4-flash`（省钱）；API key 也可写进 shell 配置文件长期生效
+- one-shot：任务完成进程退出，宠物随后入睡；适合自动化与验收
 
-### 2.2 排错模式
+### 2.3 排错模式
 
 ```bash
-HB_DEBUG=1 node apps/cli/lib/bin.js --profile headless "任务"
+HB_DEBUG=1 node apps/cli/lib/bin.js web     # 或 --profile headless "..."
 ```
 
 会在 stderr 打印插件全链路追踪：串口发现/打开、每次心跳字节数、设备回显、审批推送与决策回灌。**报 bug 时请带上这个输出**。
-
-### 2.3 Web UI 模式（尚未配置，选读）
-
-dsh 还有 `--profile web`（浏览器界面）。当前插件只装在了 headless profile；要在 Web 模式用硬件审批，执行一次：
-
-```bash
-node apps/cli/lib/bin.js plugin --profile web add ~/Documents/GitHub.nosync/CodeBuddy/dsh-hardware-buddy
-```
-
-之后 Web 模式下：设备在线时硬件审批优先，设备拔掉时审批自动回落到浏览器 Web UI。
 
 ---
 
