@@ -250,6 +250,7 @@
 
 |项|说明|触发条件|
 |---|---|---|
+|品牌清理：Codex → DeepSeek Harness|固件侧可见字符串替换：`btName = "Codex"` / `"Codex-%02X%02X"`（`main.cpp`，蓝牙名，BLE 默认禁用下优先级低但改动极小）、设置/信息屏与注释里的 Codex 文案；README/REFERENCE.md 文档措辞；**已改完的**：断连文案 `"No DSH host"`（P1）、`dsh-hardware-buddy/` 全套命名。另需决策：被替换的 Python host（`src/codex_buddy/` 整包，已不在新链路中）归档还是删除（`tests/` 32 个 pytest 随之处理）|下一轮迭代|
 |usage 数据源接入|保留 `five_hour_remaining` / `seven_day_remaining` 字段命名（国内接口普遍存在 5 小时窗口限额，语义兼容）；需调研 DeepSeek 开放平台可查询的计费/限额接口|数据源确认后|
 |tokens 持久化|跨进程/跨日累计，消除重启清零与 celebrate 重复触发（可落盘 `$DSH_HOME` 下小状态文件）|用户体验反馈|
 |chime 提示音|turn 完成提示音 + 多 agent 并发去重（触发点候选 `agent/status: running→idle`）|用户需求|
