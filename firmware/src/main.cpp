@@ -21,6 +21,7 @@
 #include "persona_logic.h"
 #include "utf8_text_logic.h"
 #include "buddy.h"
+#include "audio_clips.h"
 
 TFT_eSprite spr = TFT_eSprite(&M5.Lcd);
 TFT_eSprite landscapeClockPetSprite = TFT_eSprite(&M5.Lcd);
@@ -68,6 +69,22 @@ const char* stateNames[] = { "sleep", "idle", "busy", "attention", "celebrate", 
 
 TamaState    tama;
 static CompletionChimeState completionChimeState = {};
+// P2-B: error_seq observer mirrors completionChimeObserve so a tool failure
+// driven by the plugin (bridge.ts: state.errorSeq++ on tool/result.error)
+// can fire playClip(Error) without touching the existing completion path.
+// The error animation hook (triggerOneShot(P_DIZZY|P_BUSY, …)) is intentionally
+// NOT wired here — that belongs with the FR2 character pack and stays a
+// pure visual concern; the acceptor's hand-off to that work is the single
+// comment line below. (FR2/AC-P2-2)
+struct ErrorSeqState { bool hasBaseline; uint32_t lastSequence; };
+static ErrorSeqState errorSeqState = {};
+// P2-B idle voice timer (random 20-40 min cadence; driven only while
+// baseState == P_IDLE, never while a clip is playing). IDLE_VOICE_ENABLED
+// lets a build flip it off (e.g. for power-sensitive demos).
+constexpr bool IDLE_VOICE_ENABLED = true;
+constexpr uint32_t IDLE_VOICE_MIN_MS = 20UL * 60UL * 1000UL;
+constexpr uint32_t IDLE_VOICE_MAX_MS = 40UL * 60UL * 1000UL;
+static uint32_t nextIdleVoiceMs = 0;
 PersonaState baseState   = P_SLEEP;
 PersonaState activeState = P_SLEEP;
 UsageMeterRenderState clockUsageMeterRenderState = {};
@@ -2228,6 +2245,11 @@ void setup() {
   Serial.printf("buddy: %s\n", buddyMode ? "ASCII mode" : "GIF character loaded");
   otaBootHealthLogStatus();
   otaBootHealthPoll(millis());
+  // P2-B: voice pack online. Default ceiling is 192/255 ≈ 75% (PRD NFR1/3).
+  audioClipsInit();
+  playClip(Clip::Boot);
+  // schedule the first idle whisper so the burst is not at t=0.
+  if (IDLE_VOICE_ENABLED) nextIdleVoiceMs = millis() + IDLE_VOICE_MIN_MS;
 }
 
 void loop() {
@@ -2254,8 +2276,37 @@ void loop() {
       )) {
     playCompletionSound();
   }
+  // P2-B: tool-error observer (same shape as completionChimeObserve). The
+  // error_seq field is parsed in data.h::_applyJson and bumps only on
+  // bridge.ts emitting tool/result with ev.error set. The animation side
+  // of AC-P2-2 is intentionally left as a hook — wiring dizzy/busy
+  // belongs with the FR2 character pack on the same branch.
+  if (tama.hasErrorSeq && errorSeqState.hasBaseline == false) {
+    errorSeqState.hasBaseline = true;
+    errorSeqState.lastSequence = tama.errorSeq;
+  } else if (tama.hasErrorSeq
+             && errorSeqState.hasBaseline
+             && errorSeqState.lastSequence != tama.errorSeq) {
+    errorSeqState.lastSequence = tama.errorSeq;
+    playClip(Clip::Error);
+  }
   if (statsPollLevelUp()) triggerOneShot(P_CELEBRATE, 3000);
   baseState = derive(tama);
+
+  // P2-B: idle voice scheduler. Only fires when the device has settled
+  // (no prompt, no in-flight clip, baseState is IDLE), so it never races
+  // with approval/error audio. PRNG comes from the temp sensor + millis
+    // jitter — no need for entropy and the cadence is well-bounded.
+  if (IDLE_VOICE_ENABLED
+      && nextIdleVoiceMs != 0
+      && (int32_t)(now - nextIdleVoiceMs) >= 0
+      && baseState == P_IDLE
+      && !clipPlaying()) {
+    playClip(((now / 60000UL) & 1) ? Clip::Idle1 : Clip::Idle2);
+    uint32_t span = IDLE_VOICE_MAX_MS - IDLE_VOICE_MIN_MS;
+    nextIdleVoiceMs = now + IDLE_VOICE_MIN_MS
+      + (esp_random() % span);
+  }
 
   // After waking the screen, hold sleep for 12s so users see the wake-up
   // animation. Urgent states (attention, celebrate, busy) override this.
@@ -2395,7 +2446,7 @@ void loop() {
       responseSent = true;
       uint32_t tookS = (millis() - promptArrivedMs) / 1000;
       statsOnApproval(tookS);
-      beep(2400, 60);
+      playClip(Clip::Approve);
       if (tookS < 5) triggerOneShot(P_HEART, 2000);
       inPrompt = false;
     }
@@ -2407,7 +2458,7 @@ void loop() {
       sendCmd(cmd);
       responseSent = true;
       statsOnDenial();
-      beep(600, 60);
+      playClip(Clip::Deny);
       inPrompt = false;
     }
 
@@ -2489,7 +2540,7 @@ void loop() {
         responseSent = true;
         uint32_t tookS = (millis() - promptArrivedMs) / 1000;
         statsOnApproval(tookS);
-        beep(2400, 60);
+        playClip(Clip::Approve);
         if (tookS < 5) triggerOneShot(P_HEART, 2000);
       } else if (otaCompactOverlay) {
         // Automatic OTA is informational; A does not change the transaction.
@@ -2535,7 +2586,7 @@ void loop() {
       sendCmd(cmd);
       responseSent = true;
       statsOnDenial();
-      beep(600, 60);
+      playClip(Clip::Deny);
     } else if (otaCompactOverlay) {
       beep(600, 40);
       if (otaUpdateView().cancellable) otaUpdateCancel();
