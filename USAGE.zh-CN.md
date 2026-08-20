@@ -1,173 +1,160 @@
-# StickS3 硬件宠物 × deepseek-harness 使用手册
+# StickS3 硬件宠物 × deepseek-harness 使用手册（Web 版）
 
-> 适用范围：本仓库（DeepseekHarnessBuddy）当前 main 分支；deepseek-harness 源码仓（本机 `~/Documents/GitHub.nosync/deepseek-harness`）+ 一台刷好固件的 M5Stack StickS3（USB-C 连接电脑）。
+> 适用范围：本仓库（DeepseekHarnessBuddy）main 分支；deepseek-harness（本机 `~/Documents/GitHub.nosync/deepseek-harness` 源码或 npm 包 `@deepseek-ai/dsh`）+ 一台刷好固件的 M5Stack StickS3（USB-C 连电脑）。
 >
-> 系统构成一句话：**dsh 跑任务 → 插件把状态实时画到宠物屏幕 → 危险工具弹物理审批屏 → 你按 A/B 决定放行还是拒绝**。deepseek-harness 源码零修改。
+> 一句话：**浏览器里用 dsh 干活，宠物屏幕实时反映状态；危险工具在设备上滴一声等你按 A/B**。deepseek-harness 源码零修改。
 
 ---
 
-## 1. 五分钟快速体验
+## 1. 启动（日常唯一入口）
 
 ```bash
-# 0. 设备插上 USB-C（屏幕没反应？先拿起设备竖一下激活屏幕，见 §6）
-# 1. 进入 dsh 源码目录，带上 API key
 cd ~/Documents/GitHub.nosync/deepseek-harness
 export DEEPSEEK_API_KEY=<你的 key>
-
-# 2. 启动 Web 版（浏览器界面，日常主入口）
 node apps/cli/lib/bin.js web
-#    → 打开 http://127.0.0.1:3080，在网页里发任务即可
-
-# 3. 或跑一条单次任务（无界面，适合脚本/测试）
-node apps/cli/lib/bin.js --profile headless "用 bash 工具执行 echo hello，然后告诉我输出"
 ```
 
-会发生什么：
+看到 `dsh web: http://127.0.0.1:3080` 后，**浏览器打开这个地址**，界面里正常发任务即可。
 
-1. 任务启动 → 宠物**醒来变忙碌**（busy 动画）
-2. 模型决定调 `bash` → 设备**滴一声**，屏幕弹出**审批屏**（工具名 + 命令参数）
-3. **短按 A**（正面大按钮）→ 命令执行，宠物比心；**短按 B**（机身上边缘小键）→ 拒绝执行
-4. 30 秒不按 → 自动拒绝（模型会收到"审批超时"）
-5. 任务结束 → 宠物回 idle；累计 token 过 5 万 → 庆祝动画
-6. Web 版进程退出 30 秒后 → 宠物睡觉；**拔掉设备时审批自动改在浏览器里弹**（Web UI 接管），插回又回到硬件
-
----
-
-## 2. 启动方式汇总
-
-### 2.1 Web 版（日常主入口）
-
-```bash
-cd ~/Documents/GitHub.nosync/deepseek-harness
-export DEEPSEEK_API_KEY=<key>
-node apps/cli/lib/bin.js web          # 打开 http://127.0.0.1:3080
-```
-
-- 浏览器里发任务、看会话；**设备在线时审批走硬件**（滴声 + 屏幕 + A/B 键），**设备拔掉时审批自动弹在浏览器里**——同一套白名单
-- 也可以用 npm 发布版跑（与本机源码同版本 0.1.0-rc.7，共用 `~/.dsh` 的 profile）：
+等价写法（用 npm 发布版，不依赖源码仓，两者共用同一套配置和设备）：
 
 ```bash
 npx @deepseek-ai/dsh web
 ```
 
-### 2.2 headless 单任务（脚本/测试）
+启动后设备侧自动发生：插件发现串口（按 VID 0x303A）→ 打开 → 每 3 秒心跳 → 宠物醒来进入 idle。
+
+排错模式（打印串口/心跳/审批全链路到 stderr，报 bug 必带）：
 
 ```bash
-node apps/cli/lib/bin.js --profile headless "任务描述"
+HB_DEBUG=1 node apps/cli/lib/bin.js web
 ```
 
-- one-shot：任务完成进程退出，宠物随后入睡；适合自动化与验收
-
-### 2.3 排错模式
-
-```bash
-HB_DEBUG=1 node apps/cli/lib/bin.js web     # 或 --profile headless "..."
-```
-
-会在 stderr 打印插件全链路追踪：串口发现/打开、每次心跳字节数、设备回显、审批推送与决策回灌。**报 bug 时请带上这个输出**。
+停止：终端 Ctrl-C。进程停了 30 秒后宠物会睡着（正常）。
 
 ---
 
-## 3. 宠物功能全览
+## 2. 第一次上手：5 分钟体验全流程
 
-### 3.1 状态（自动跟随 dsh）
+1. **开机激活屏幕**：设备刚上电时如果屏幕定格不动，把它**拿起来竖一下**（方向感应需要一次明确姿态），之后平放也正常显示
+2. 浏览器发任务：*「用 bash 执行 echo hi，然后告诉我结果」*
+3. 宠物变 🔥 **忙碌** → 模型调 `bash` → 设备**滴一声** + 弹出**审批屏**（工具名 + 命令参数，持续显示直到你按键）
+4. **A 短按**（正面大键）放行 / **B**（机身上边缘小键）拒绝 / 30 秒不按自动拒
+5. 放行成功且 5 秒内按键 → 宠物 ❤️ 比心；任务结束回 idle
+6. **拔线实验**：任务中途拔掉 USB → 下一次审批自动弹在**浏览器里**（Web UI 接管）；插回 5 秒内恢复，审批又回到设备
 
-| 宠物状态 | 触发条件 |
+---
+
+## 3. 宠物功能对照表
+
+### 3.1 状态（自动跟随 dsh，无需操作）
+
+| 状态 | 触发 |
 |---|---|
-| 💤 睡觉（zzz）| 30 秒内没有心跳（dsh 没在跑/进程退了）|
-| 🙂 待机 idle | dsh 在跑但没有活动任务 |
-| 🔥 忙碌 busy | agent 正在跑（`agent/status: running`）|
-| ⚠️ 审批 attention | 有工具在等你按按钮（屏幕显示工具名 + 参数摘要）|
-| 🎉 庆祝 celebrate | 累计 token 超过阈值（默认 5 万，可配）或任务快速获批（<5 秒按 A 会比心 ❤️）|
-| 😵 头晕 dizzy | **甩一甩设备** |
-| ❤️ 比心 | 审批 5 秒内按下 A |
+| 💤 睡觉 | 30 秒无心跳（web 进程停了/设备拔了）|
+| 🙂 待机 | web 在跑、无活动任务 |
+| 🔥 忙碌 | agent 正在执行 |
+| ⚠️ 审批等待 | 有工具在等你按键（屏显工具名+参数）|
+| 🎉 庆祝 | 累计 token 过阈值（默认 5 万）|
+| ❤️ 比心 | 审批 5 秒内按了 A |
+| 😵 头晕 | 甩一甩设备（彩蛋）|
 
-另有原版彩蛋保留：周五下午宠物会自发庆祝。
+另有原版彩蛋：周五下午宠物自发庆祝。
 
-### 3.2 按键操作
+### 3.2 按键
 
-| 操作 | 审批屏显示时 | 平时 |
+| 操作 | 审批屏时 | 平时 |
 |---|---|---|
-| **A 短按**（<0.6 秒，正面大键）| ✅ 放行（`once`）| 切换显示模式（宠物视图 ↔ 信息页）|
-| **A 长按**（≥0.6 秒）| 菜单（不会误放行）| 打开主菜单（设置/WiFi/OTA 等 6 项）|
-| **B 短按**（机身上边缘小键）| ❌ 拒绝（`deny`）| 菜单内返回/取消 |
-| **甩动** | — | 头晕动画 2 秒 |
+| **A 短按**（<0.6s，正面大键）| ✅ 放行 | 切换显示模式 |
+| **A 长按**（≥0.6s）| 菜单（不会误放行）| 主菜单（设置/WiFi/OTA 等 6 项）|
+| **B 短按**（上边缘小键）| ❌ 拒绝 | 菜单内返回/取消 |
+| 甩动 | — | 头晕 2 秒 |
 
-⚠️ 最常见的误操作：想放行却**长按**了 A——长按是菜单键，审批不会响应。听到滴声后**短按**即可。
+⚠️ 最常见误操作：想放行却**长按**了 A（长按是菜单）。听到滴声后**短按**。
 
-### 3.3 屏幕与横竖屏
+### 3.3 屏幕形态
 
-- 设备会**自动横竖屏**：竖着拿是宠物+状态，横过来是仪表盘视图（token/事件列表更全）
-- 插着 USB 不动时显示**充电时钟**（需要时间：给设备配 WiFi 走 NTP，见 §3.4）
-- 设置菜单里可以换宠物（18 个 ASCII 角色）和开关 LED 等
+- **竖拿**：宠物 + 状态文字；**横拿**：仪表盘视图（token、事件列表更全）——自动旋转
+- **插着 USB 不动**：充电时钟（需要对时：A 长按进菜单 → WiFi 配网，设备走 NTP）
+- **设置菜单**：可换 18 个 ASCII 宠物角色、LED 开关、WiFi、OTA 等
 
-### 3.4 设置菜单（A 长按进入）
+### 3.4 设备离线/拔插行为
 
-- **WiFi 配置**：配网后设备用 NTP 对时（时钟功能需要）；也是未来 WiFi OTA 的前提
-- **OTA 更新**：沿用原信任链（当前构建内嵌开发信任材料，日常 USB 使用不受影响；要启用 OTA 推送需重新做正式信任引导，见 Backlog）
-- **宠物选择 / LED / auto OTA** 等原版选项保留
-
-### 3.5 拔插行为
-
-- 任务跑着拔掉 USB → 插件不崩溃，dsh 照常跑（审批自动回落）；插回后 5 秒内恢复心跳，宠物醒来
-- 设备不在时跑任务：危险工具会被 dsh 以"无可用审批通道"拒绝（这是设计行为——没有人在场就不该放行 shell）
+- 拔掉 → 插件不崩溃、web 照常跑，审批回落到浏览器弹窗；插回 5 秒内恢复
+- 设备不在时跑危险工具 → dsh 以「无可用审批通道」拒绝（设计行为：没人在场不放行 shell）
 
 ---
 
-## 4. 配置调节
+## 4. 配置调节（改完即时生效，不用重启）
 
-配置文件：`~/.dsh/profiles/headless/cordis.patch.yml`（改完即时生效，无需重装）：
+配置文件（**web 和 headless 各一份，保持一致**）：
+
+```
+~/.dsh/profiles/web/cordis.patch.yml      ← Web 版用这份
+~/.dsh/profiles/headless/cordis.patch.yml ← 单任务模式用这份
+```
 
 ```yaml
 - id: hardware-buddy
   config:
-    port: null                # 指定串口；null = 按 VID 自动发现
+    port: null                # 指定串口；null = 自动发现
     vendorId: '0x303A'
     approvalTimeout: 30000    # 审批超时（毫秒）
-    heartbeatIntervalMs: 3000 # 心跳间隔（须远小于设备 30s 窗口）
+    heartbeatIntervalMs: 3000 # 心跳间隔
     celebrateThreshold: 50000 # 庆祝阈值（累计 token）
-    dangerousTools:           # 走硬件审批的工具（正则，实测 25 个工具全小写）
+    dangerousTools:           # 走硬件审批的工具（正则；实测 25 个工具全小写）
       - '^bash$'
       - '^write$'
       - '^edit$'
       - '^str_replace_editor$'
-    excludedTools:            # 不走硬件、回落 Web UI 的工具（正则）
+    excludedTools:            # 不走硬件、由浏览器审批的工具
       - '^MCP__danger_.*'
-    entriesLimit: 5           # 屏幕事件列表条数
+    entriesLimit: 5           # 屏幕事件条数
 ```
 
 常用改法：
 
-- **想更安全**：把 `^web_search$`、`^skill$` 也加进 `dangerousTools`
-- **嫌审批烦**：从 `dangerousTools` 里删掉 `^edit$`（编辑类放行）
+- **更安全**：`dangerousTools` 加 `^web_search$`、`^skill$`
+- **嫌烦**：从 `dangerousTools` 删 `^edit$`
 - **庆祝更频繁**：`celebrateThreshold: 5000`
 
+⚠️ **web 和 headless 不要同时跑**（抢串口）。
+
 ---
 
-## 5. 故障排查
+## 5. 单任务模式（脚本用，选读）
 
-| 症状 | 原因与解法 |
+```bash
+node apps/cli/lib/bin.js --profile headless "任务描述"   # 一次性跑完退出
+```
+
+适合自动化、CI、验收脚本；日常体验用 Web 版。
+
+---
+
+## 6. 故障排查
+
+| 症状 | 解法 |
 |---|---|
-| 屏幕一直定格（开机后没反应）| 上游防误画设计：开机后**把设备拿起来竖一下**即激活；之后平放也正常 |
-| 听到滴声但没看到审批屏 | 已修复（v30f6de4 后不存在）；若复现，用 `HB_DEBUG=1` 跑并检查 `prompt=` 是否持续出现在回显里 |
-| dsh 报 `QUOTA: Insufficient Balance` | API key 余额不足，充值 |
-| 宠物一直睡觉 | dsh 进程没在跑（心跳 30 秒断即睡）；确认任务还活着 |
-| `No StickS3 CDC port found` | 串口没发现：换线/换口；Linux 需 `sudo usermod -aG dialout $USER` 后重新登录 |
-| 想看插件在干什么 | `HB_DEBUG=1` 启动（§2.2）|
-| 心跳乱了/丢行 | 已修复（CDC 缓冲 1024B）；若复现请提交 issue 附 HB_DEBUG 日志 |
+| 屏幕定格不动 | 开机后拿起设备竖一下（§2.1）；一次即激活 |
+| 听到滴声没看到审批屏 | 已修复；若复现，`HB_DEBUG=1` 跑并看回显里 `prompt=` 是否持续 |
+| `QUOTA: Insufficient Balance` | API key 余额不足 |
+| 宠物一直睡 | web 进程没在跑（30 秒断心跳即睡）|
+| `No StickS3 CDC port found` | 换线/换 USB 口；Linux 需 `sudo usermod -aG dialout $USER` 重新登录 |
+| 心跳丢行/画面错乱 | 已修复（CDC 缓冲 1024B）；复现请附 `HB_DEBUG=1` 日志提 issue |
+| web 和设备都卡 | 确认没有两个 dsh 进程同时跑：`pkill -f "profile headless"` |
 
 ---
 
-## 6. 已知限制（诚实清单）
+## 7. 已知限制
 
-- **配额显示（5h/7天）未接入**：协议字段在，但 DeepSeek 侧数据源未定（Backlog stretch）
-- **设备时间同步**：插件未发 `time` 字段；时钟依赖 WiFi/NTP（§3.4 配网）
-- **OTA 推送流程**：开发信任链构建，真机 OTA 推送需正式信任引导（Backlog）
-- **多设备/多实例**：单设备单进程假设（Backlog）
-- **Windows**：不支持（macOS 主力，Linux 可用）
+- 配额显示（5 小时/7 天进度条）未接入（第二期规划中）
+- 设备时钟依赖 WiFi/NTP 配网（插件暂不发 time 字段，第二期）
+- OTA 推送为开发信任链（第二期做正式信任引导）
+- 单设备单进程；Windows 不支持
 
 ---
 
-## 7. 日常一句话
+## 8. 一句话总结
 
-> 插上 USB → `dsh --profile headless "干活"` → 宠物替你盯着 → 滴声响起看一眼屏幕 → A 放行 / B 拒绝。
+> 起 web → 开浏览器 → 正常干活 → 滴声看设备 → **A 放行 / B 拒绝** → 拔线了浏览器接管审批。
