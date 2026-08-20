@@ -24,8 +24,9 @@
 |token/usage 字段下发|✅ tokens/tokens_today 下发无解析错误|
 |设备→host 串口日志通道|✅ 同口日志正常回传|
 |idle→busy→attention→celebrate 状态切换|✅（屏幕侧，肉眼确认）|
-|A/B 按钮 → `{"cmd":"permission",...}`|⏳ **未捕获**：4 轮测试 + 5 分钟长窗口内无任何物理输入事件（含摇一摇）。代码路径审查无恙（本次 diff 未触碰按键/IMU 逻辑；注意 A 键需**短按 <600ms**，长按是菜单键）。待人体重新验证|
-|shake → dizzy 日志|⏳ 同上|
+|A 键 → `{"cmd":"permission",...,"decision":"once"}`|✅ 三次实证（t-004 / t-002 / t-005）；注意 A 键需**短按 <600ms**，长按是菜单键|
+|B 键 → `{"cmd":"permission",...,"decision":"deny"}`|✅ 实证（t-005）；B 键在机身上边缘，非正面大键|
+|shake → dizzy 日志|⏳ 未触发（窗口内无人摇动；代码路径与按键同源，风险低）|
 
 ## 3. 待完成 P0 项（需真实 dsh 环境）
 
