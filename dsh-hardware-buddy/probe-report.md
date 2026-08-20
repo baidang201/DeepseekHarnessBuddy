@@ -45,6 +45,10 @@
 |macOS `tty.`/`cu.` 陷阱|`SerialPort.list()` 返回 `/dev/tty.usbmodem*`；打开 tty.* 会永久等待 DCD，open 静默挂起|`withCuPath()`：darwin 上映射为 `/dev/cu.*`|
 |open 竞态|`port.on('open')` 触发连接回调 → 立即 flush，但 `this.port` 在 `await open` 之后才赋值，首条心跳被 send() 静默丢弃|`this.port/parser` 赋值挪到 `port.open()` 之前|
 |**token 计数恒为零**|live `session/event` 载荷带信封 `{type,seq,time,data}`，且 usage 只在 `assistant/chunk`（`chunk.type==='usage'`）上；原实现读 `assistant/message` 的 `ev.usage`（live 恒为空，落盘才有——单测用拆信封形状所以全绿）|归一化 `ev.data ?? ev`；usage 主通道改 chunk，message usage 留兜底；计数含 cache/reasoning 全量|
+|**审批屏 3 秒即被冲掉（用户"只听到滴声看不到画面"的根因）**|固件把 `prompt` 字段缺失当"清除审批屏"（`data.h:346-352`）；插件只推一次 prompt，下一个 3s 全量心跳（无 prompt 字段）就把屏冲掉。协议是状态式的，pending prompt 必须每次心跳都带|prompt/waiting 进入心跳状态机（`setPendingPrompt`/`setPendingWaiting`），每次 flush 携带，settle 时清除|
+|**设备 RX 大概率丢行（46 写仅 4 解析）**|ESP32 HWCDC 收发队列默认各 256B（`HWCDC.cpp:317`），心跳行 ~270B 超限即溢出丢失|固件 `Serial.setRxBufferSize(1024)` + `setTxBufferSize(1024)` 预置（须在 begin 前）；重烧后 1:1 解析|
+|**背靠背写合并成乱码行（`json malformed len=367`）**|同 tick 内两次 flush（waiting + prompt）在设备 CDC RX 端被拼成一行、换行丢失|写合并器：60ms 窗口内只写"最新全量快照"（状态式协议保证安全性）|
+|**dsh 进程事件循环冻结**|串口数据回调内的宿主 logger 调用可阻塞/抛出|logger 调用 try/catch 包裹（best-effort）|
 |celebrate msg 永久驻留|`state.msg='milestone!'` 触发后从不清除，一直占设备状态栏|flush 发送一次后清空|
 |插件日志不可见|dsh headless 抑制插件 logger 输出，info/warn 全部沉默|新增 `src/debug.ts`：`HB_DEBUG=1` 时 stderr 输出 CDC 生命周期追踪|
 
