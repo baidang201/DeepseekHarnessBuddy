@@ -54,7 +54,15 @@
 - 断连文案 `"No DSH host"` 在运行间隔超时后生效（回显中可见）
 - `npm test` 35/35 保持全绿（修复后）
 
-### 3.4 当前阻塞
+### 3.4 屏幕"定格"问题的结论（已定性，非缺陷）
+
+现象：真机测试期间屏幕长期定格在睡眠宠物，蜂鸣正常、按键正常、内部状态正常。
+
+定性：**上游 CodeBuddy 的防误画设计**（`clock_orient_logic.h` 注释原文："prevents a cold sideways surface from drawing a speculative portrait frame while its IMU settles"）。冷启动后若设备从未被拿起（IMU 姿态模糊且无 stable orientation），`autoSurfaceAwaitingOrientation` 为真 → 渲染挂起等待明确方向；一旦被竖持/横持一次，`hasStableOrientation` 记住方向（本次开机有效），之后即使平放也正常渲染。验证：竖持设备 + 心跳序列（idle→busy→celebrate→prompt）下屏幕随状态正常变化。
+
+使用提示（写进 README 即可）：**开机后先把设备拿起来一下**，屏幕即激活。可选 Backlog：冷启动 N 秒后回退默认竖屏。
+
+### 3.5 当前阻塞
 
 - **AC4 全链路**（工具触发 → 设备审批 → A/B 决策 → dsh 继续）：被 `QUOTA: Insufficient Balance` 阻塞，需给 DeepSeek API key 充值后重跑
 - 设备屏幕渲染（IMU 方向解析门控）问题独立跟踪中，不影响协议链路

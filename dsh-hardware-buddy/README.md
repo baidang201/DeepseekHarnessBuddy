@@ -26,7 +26,11 @@ The plugin ships a `dsh.bundle` manifest (`cordis.patch.yml`) that dsh applies a
       productId: null
       approvalTimeout: 30000     # ms before an unanswered prompt auto-cancels
       heartbeatIntervalMs: 3000  # full-snapshot interval (<< device 30s window)
-      dangerousTools: []         # regex list routed to the hardware screen
+      dangerousTools:            # regex list routed to the hardware screen
+        - '^bash$'               # defaults finalized from the real 25-tool dump
+        - '^write$'              # (all lowercase — see probe-report.md)
+        - '^edit$'
+        - '^str_replace_editor$'
       excludedTools:
         - '^MCP__danger_.*'      # regex list routed to the Web UI approval
       celebrateThreshold: 50000
@@ -35,6 +39,10 @@ The plugin ships a `dsh.bundle` manifest (`cordis.patch.yml`) that dsh applies a
 ```
 
 Config changes in `cordis.patch.yml` hot-reload via dsh's HMR — no restart needed.
+
+## Screen stays frozen after boot? (not a bug)
+
+After a cold boot, if the device has never been picked up, the firmware waits for an unambiguous orientation before it starts rendering (an upstream CodeBuddy anti-speculation design): a device lying flat gives ambiguous IMU readings, so the screen keeps the boot frame while beeps and buttons keep working. **Pick the device up once** (hold it upright or sideways) — the orientation is then remembered for the rest of the boot, and the screen renders normally even when you put it back down flat.
 
 ## Safety model (important)
 
