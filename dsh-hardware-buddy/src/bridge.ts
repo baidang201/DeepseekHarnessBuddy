@@ -2,6 +2,7 @@ import type { AppContext } from './context.js';
 import type { Config } from './config.js';
 import type { Heartbeat } from './protocol.js';
 import { trimHeartbeat } from './protocol.js';
+import { dbg } from './debug.js';
 
 interface BridgeState {
   total: number; // session-only count (avoid agent+session double counting)
@@ -57,8 +58,15 @@ export class EventBridge {
     this.disposers.push(
       this.ctx.on(
         'session/event',
-        (_session: unknown, ev: { type?: string } & Record<string, unknown>) => {
-          if (ev.type === 'tool/result' || ev.type === 'assistant/message') {
+        (_session: unknown, rawEv: { type?: string } & Record<string, unknown>) => {
+          // Live session/event payloads are WRAPPED: {type, seq, time, data}.
+          // Unit tests (and the persisted SessionEventMap types) use the
+          // unwrapped data shape. Normalize once; everything below reads `ev.*`.
+          const ev = ((rawEv as { data?: Record<string, unknown> }).data ?? rawEv) as
+            Record<string, unknown>;
+          const type = rawEv.type;
+          dbg(`[hb] event ${type ?? '?'}${ev.usage ? ' +usage' : ''}`);
+          if (type === 'tool/result' || type === 'assistant/message') {
             const summary = this.summarizeEvent(ev).slice(0, 80);
             if (summary) {
               this.state.entries.unshift(summary);
@@ -67,14 +75,27 @@ export class EventBridge {
               }
             }
           }
-          if (ev.type === 'assistant/message' && ev.usage) {
-            const u = ev.usage as { inputTokens?: number; outputTokens?: number };
-            const delta = (u.inputTokens ?? 0) + (u.outputTokens ?? 0);
+          // Live usage rides on assistant/chunk (chunk.type === 'usage').
+          // The persisted assistant/message record also carries usage, but the
+          // live emit does NOT — counting only the message event yields zero.
+          const chunk = ev.chunk as { type?: string; usage?: Record<string, number> } | undefined;
+          const usage = chunk?.type === 'usage'
+            ? chunk.usage
+            : type === 'assistant/message'
+              ? (ev.usage as Record<string, number> | undefined)
+              : undefined;
+          if (usage) {
+            const delta =
+              (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0) +
+              (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0) +
+              (usage.reasoningTokens ?? 0);
             this.state.tokens += delta;
             this.state.tokensToday += delta;
+            dbg(`[hb] usage +${delta} total=${this.state.tokens}`);
             if (!this.state.celebrateFired && this.state.tokens >= this.config.celebrateThreshold) {
               this.state.celebrateFired = true;
               this.state.msg = 'milestone!';
+              dbg('[hb] CELEBRATE fired');
             }
           }
         },
@@ -102,6 +123,9 @@ export class EventBridge {
       msg: this.state.msg,
     };
     this.send(trimHeartbeat(hb));
+    // Celebrate msg is one-shot: delivered on the next flush, then cleared so
+    // it does not squat on the device status line forever.
+    if (this.state.msg === 'milestone!') this.state.msg = undefined;
   }
 
   private summarizeEvent(ev: Record<string, unknown>): string {
