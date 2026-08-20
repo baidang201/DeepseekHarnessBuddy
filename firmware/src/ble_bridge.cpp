@@ -1,3 +1,5 @@
+#if CODE_BUDDY_BLE_ENABLED
+
 #include "ble_bridge.h"
 #include <BLEDevice.h>
 #include <BLEServer.h>
@@ -230,3 +232,5 @@ size_t bleWrite(const uint8_t* data, size_t len) {
   }
   return sent;
 }
+
+#endif  // CODE_BUDDY_BLE_ENABLED

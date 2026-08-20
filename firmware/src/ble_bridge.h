@@ -14,6 +14,7 @@
 // same _applyJson path that USB/BT-Classic use. Replies (acks, status
 // snapshots) are written via bleWrite() and chunked to the negotiated MTU.
 
+#if CODE_BUDDY_BLE_ENABLED
 void bleInit(const char* deviceName);
 // True once the NUS service has started and the advertising start request has
 // completed. A client connection is deliberately not required for boot health.
@@ -33,3 +34,18 @@ void bleClearBonds();
 size_t bleAvailable();
 int bleRead();
 size_t bleWrite(const uint8_t* data, size_t len);
+#else
+// CODE_BUDDY_BLE_ENABLED == 0: BLE is compiled out. Provide inline stubs so
+// every call site still builds and links without pulling the Bluedroid stack
+// into the binary. No BLE symbol is emitted in this configuration.
+inline void bleInit(const char*) {}
+inline bool bleReady() { return true; }         // treated as ready (not failed)
+inline bool bleStartupFailed() { return false; }
+inline bool bleConnected() { return false; }
+inline bool bleSecure() { return false; }
+inline uint32_t blePasskey() { return 0; }
+inline void bleClearBonds() {}
+inline size_t bleAvailable() { return 0; }
+inline int bleRead() { return -1; }
+inline size_t bleWrite(const uint8_t*, size_t) { return 0; }
+#endif
