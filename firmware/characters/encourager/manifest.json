@@ -1,0 +1,24 @@
+{
+  "name": "encourager",
+  "colors": {
+    "body": "#4CAF50",
+    "bg": "#0E0E12",
+    "text": "#FFFFFF",
+    "textDim": "#9AA0A6",
+    "ink": "#0E0E12"
+  },
+  "states": {
+    "idle": [
+      "idle_0.gif",
+      "idle_1.gif",
+      "idle_2.gif",
+      "idle_3.gif"
+    ],
+    "sleep": "sleep.gif",
+    "busy": "busy.gif",
+    "attention": "attention.gif",
+    "dizzy": "dizzy.gif",
+    "celebrate": "celebrate.gif",
+    "heart": "heart.gif"
+  }
+}
