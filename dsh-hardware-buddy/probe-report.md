@@ -105,7 +105,27 @@ clearPrompt cb                                           ← 插件清除审批�
 
 与此前 cancelled（超时）路径的区别得到实证：`rejected` 携带 "the user rejected" reason，模型据此明确放弃工具调用。
 
-### 3.8 遗留
+### 3.8 二期手势审批 LIVE 闭环（2026-08-20）
+
+固件 main.cpp 接入 `gesturePoll`：实时 IMU 采样 + 平面自适应（竖直握持用 XZ 屏幕面，平放桌面用 XY）+ 1.5s 锁定 + 平放静止抑制。
+
+**画圆 → 放行**（用户实测）：
+```
+[prompt] show id=call_00_dDYBNFNo... tool=bash mode=0
+[gesture] circle -> approve           ← 固件识别用户画的圆
+{"cmd":"permission","id":"...","decision":"once"}  ← 设备回包
+```
+
+**画 X → 拒绝**（用户实测）：
+```
+[prompt] show id=call_00_zTXcPAfi... tool=bash mode=0
+[gesture] cross -> deny               ← 固件识别用户画的 X
+{"cmd":"permission","id":"...","decision":"deny"}   ← 设备回包
+```
+
+手势与 A/B 按键**走完全相同的发送/语音/动画路径**（`approvePendingPrompt()` / `denyPendingPrompt()` 共享），物理键永远兜底。
+
+### 3.9 遗留
 
 - AC5 拔插重连、AC6 危险工具走 Web UI、AC8 HMR 配置热更：尚未做有针对性的人肉用例（机制已有单测覆盖）
 - AC10 配额显示：stretch（数据源待定）
