@@ -80,7 +80,14 @@
 
 单轮覆盖：**AC3**（total/running/waiting 全程随真实事件流转）、**AC4**（物理审批闭环：pre-execute 命中 → 审批屏 → A 键 → once → allowed-once → 工具放行）、**AC7**（超时 → cancelled → dsh deny with reason → 模型自动重试，走了两遍）。
 
-### 3.6 遗留
+### 3.6 AC9 / AC13 / AC6 验证（2026-08-20 补充）
+
+- **AC9 celebrate**：token 计数修复后，live 触发（usage chunk 全量计数 18K+ 过阈值）→ `msg=milestone!` 出现在设备回显心跳中，设备侧 token 升级庆祝动画由 `statsPollLevelUp()` 自触发
+- **AC13 设备离线退位**：插件指向不存在端口模拟离线 → 0 次审批屏推送、无崩溃、优雅退位（next()），任务正常完成（模型收到拒绝后按指令汇报）
+- **AC6 excluded 分流**：设备在线、`bash` 加入 excludedTools → **0 次** `[prompt] show`（硬件屏不出现），走 next() 放行给 Web UI/默认策略
+- **B 键拒绝全链路**：各环节独立证实（设备 B→deny JSON t-005 实证；插件映射+runtime 行为有单测；同一 settle 管道在 cancelled 路径 live 跑过 4 次）；live 端到端组合因按键时机未捕获，留待日常使用自然完成（4 次尝试均为 30s/60s/180s 窗口超时）
+
+### 3.7 遗留
 
 - AC5 拔插重连、AC6 危险工具走 Web UI、AC8 HMR 配置热更：尚未做有针对性的人肉用例（机制已有单测覆盖）
 - AC10 配额显示：stretch（数据源待定）
