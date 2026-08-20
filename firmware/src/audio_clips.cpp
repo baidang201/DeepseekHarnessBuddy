@@ -25,6 +25,7 @@
 // ---------------------------------------------------------------------------
 
 #include "audio_clips.h"
+#include "board_compat.h"
 #include "audio_clips_data.h"
 #include <stdint.h>
 #include <stddef.h>
