@@ -1,0 +1,16 @@
+- insert:
+  - id: hardware-buddy
+    name: '@dsh-hardware-buddy/dsh-hardware-buddy'
+    config:
+      port: null
+      vendorId: '0x303A'
+      productId: null
+      baudRate: 115200
+      approvalTimeout: 30000
+      heartbeatIntervalMs: 3000
+      dangerousTools: []   # P0 probe 定稿后填入真实 dsh 工具名正则
+      excludedTools:
+        - '^MCP__danger_.*'
+      celebrateThreshold: 50000
+      entriesLimit: 5
+      logLevel: info

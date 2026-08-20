@@ -1,0 +1,55 @@
+{
+  "name": "@dsh-hardware-buddy/dsh-hardware-buddy",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness host plugin that mirrors agent state to a CodeBuddy StickS3 pet over USB CDC and routes physical A/B approval back into the approval waterfall.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "cordis.patch.yml"
+  ],
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "oxlint src/"
+  },
+  "dependencies": {
+    "@deepseek-ai/cosmokit": "1.8.2",
+    "@deepseek-ai/schemastery": "3.18.1",
+    "serialport": "^12.0.0",
+    "@serialport/parser-readline": "^12.0.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "4.0.1",
+    "@deepseek-ai/dsh-tools": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-user-approval": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-agent": "0.1.0-rc.7",
+    "@deepseek-ai/dsh-session": "0.1.0-rc.7"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": { "optional": true },
+    "@deepseek-ai/dsh-tools": { "optional": true },
+    "@deepseek-ai/dsh-user-approval": { "optional": true },
+    "@deepseek-ai/dsh-agent": { "optional": true },
+    "@deepseek-ai/dsh-session": { "optional": true }
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.1",
+    "@types/node": "^22.0.0",
+    "oxlint": "^1.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
