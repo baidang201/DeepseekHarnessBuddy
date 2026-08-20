@@ -2114,6 +2114,11 @@ void setup() {
   cfg.internal_spk = true;
   cfg.internal_rtc = true;
   M5.begin(cfg);
+  // USB CDC queues default to 256B each (HWCDC.cpp) — heartbeat lines run up
+  // to ~900B by protocol, so a default queue silently drops most long lines.
+  // Must be preset BEFORE the interface starts.
+  Serial.setRxBufferSize(1024);
+  Serial.setTxBufferSize(1024);
   Serial.begin(115200);
   uint32_t serialWaitStart = millis();
   while (!Serial && millis() - serialWaitStart < 500) delay(10);
