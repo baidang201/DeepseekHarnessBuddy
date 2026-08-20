@@ -91,7 +91,21 @@
 - **AC6 excluded 分流**：设备在线、`bash` 加入 excludedTools → **0 次** `[prompt] show`（硬件屏不出现），走 next() 放行给 Web UI/默认策略
 - **B 键拒绝全链路**：各环节独立证实（设备 B→deny JSON t-005 实证；插件映射+runtime 行为有单测；同一 settle 管道在 cancelled 路径 live 跑过 4 次）；live 端到端组合因按键时机未捕获，留待日常使用自然完成（4 次尝试均为 30s/60s/180s 窗口超时）
 
-### 3.7 遗留
+### 3.7 B 键拒绝全链路 LIVE 闭环（2026-08-20，最终）
+
+审批屏持续显示修复后，用户在设备上按下 B，完整链路一次走通：
+
+```
+[prompt] show id=call_00_LaDIMDuv... tool=bash          ← 审批屏持续显示（状态式 prompt 修复生效）
+[prompt] deny id=call_00_LaDIMDuv...                     ← 用户短按 B
+{"cmd":"permission","id":"call_00_LaDIMDuv...","decision":"deny"}  ← 设备回包
+clearPrompt cb                                           ← 插件清除审批状态
+模型回答："被拒绝（the user rejected tool \"bash\"）"       ← dsh runtime 'rejected' 映射 live 验证
+```
+
+与此前 cancelled（超时）路径的区别得到实证：`rejected` 携带 "the user rejected" reason，模型据此明确放弃工具调用。
+
+### 3.8 遗留
 
 - AC5 拔插重连、AC6 危险工具走 Web UI、AC8 HMR 配置热更：尚未做有针对性的人肉用例（机制已有单测覆盖）
 - AC10 配额显示：stretch（数据源待定）
