@@ -32,11 +32,22 @@ static bool landscapeHeartbeatSpriteReady = false;
 // in one room are distinguishable in the desktop picker. Name persists in
 // btName for the BLUETOOTH info page.
 static char btName[16] = "Codex";
+
+// True if this boot has received at least one valid JSON line over USB. Used
+// by the OTA boot-health logic (otaBootReadyUsbDataSeen) as the no-BLE
+// equivalent of the BLE "ready" bit, so a USB-only image is still confirmed
+// instead of auto-rolling-back after 30s.
+uint8_t otaBootReadyUsbDataSeen(void) {
+  return _lastLiveMs != 0 ? 1 : 0;
+}
+
 static void startBt() {
   uint8_t mac[6] = {0};
   esp_read_mac(mac, ESP_MAC_BT);
   snprintf(btName, sizeof(btName), "Codex-%02X%02X", mac[4], mac[5]);
+#if CODE_BUDDY_BLE_ENABLED
   bleInit(btName);
+#endif
 }
 
 #include "character.h"
@@ -205,10 +216,7 @@ static void playCompletionSound() {
 }
 
 static void sendCmd(const char* json) {
-  Serial.println(json);
-  size_t n = strlen(json);
-  bleWrite((const uint8_t*)json, n);
-  bleWrite((const uint8_t*)"\n", 1);
+  Serial.println(json);  // USB CDC is the only transport in no-BLE builds
 }
 
 static UsageMeterRenderFrame usageMeterFrameForDisplay(
@@ -459,7 +467,9 @@ static void applyReset(uint8_t idx) {
     _prefs.end();
     wifiManagerForget();
     LittleFS.format();
+#if CODE_BUDDY_BLE_ENABLED
     bleClearBonds();
+#endif
   }
   delay(300);
   ESP.restart();
@@ -2123,8 +2133,14 @@ void setup() {
   otaBootHealthPoll(millis());
 
   startBt();
+#if CODE_BUDDY_BLE_ENABLED
   if (bleReady()) otaBootHealthReady(OTA_BOOT_READY_BLE);
   else if (bleStartupFailed()) otaBootHealthCriticalFailure(OTA_BOOT_REASON_BLE);
+#else
+  // No BLE transport: the OTA boot-readiness BLE bit is satisfied by a live
+  // USB data line this boot (see OTA_BOOT_READY_BLE_REQ).
+  if (otaBootReadyUsbDataSeen()) otaBootHealthReady(OTA_BOOT_READY_BLE);
+#endif
   otaBootHealthPoll(millis());
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, HIGH);   // off
@@ -2216,8 +2232,12 @@ void loop() {
   M5.update();
   // Advertising readiness is asynchronous. The GAP callback, rather than the
   // void startAdvertising() request, is the concrete health signal.
+#if CODE_BUDDY_BLE_ENABLED
   if (bleReady()) otaBootHealthReady(OTA_BOOT_READY_BLE);
   else if (bleStartupFailed()) otaBootHealthCriticalFailure(OTA_BOOT_REASON_BLE);
+#else
+  if (otaBootReadyUsbDataSeen()) otaBootHealthReady(OTA_BOOT_READY_BLE);
+#endif
   t++;
   uint32_t now = millis();
 
