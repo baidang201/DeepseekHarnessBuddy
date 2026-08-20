@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.42 - 2026-08-20 (P2-B voice pack)
+- Firmware voice pack: 6 cheerleader clips (approve/deny/error/idle1/idle2/boot) at 16 kHz / 16-bit / mono, ~388 KB bundle, 75% volume ceiling, single-channel mutex through `M5.Speaker.playRaw`.
+- Plugin completion chime + tool-error relay: `turn/end` bumps `completion_seq` (8 s merge), `tool/result.error` bumps `error_seq`; firmware observers translate bumps into `playCompletionSound()` / `playClip(Error)`.
+- Host time sync: heartbeat carries `time:[epoch, tz]` at most every 60 s; firmware already parses it (data.h:193-249), zero firmware changes on this path.
+- Validation: `g++ -fsyntax-only -std=c++17 -I src src/audio_clips.cpp` green; 43/43 plugin tests green.
+
 ## 0.1.41 - 2026-07-23
 
 - Kept the last valid Codex allowance visible when a fresh account-rate-limit read is temporarily unavailable, malformed, or reported as `null`.
