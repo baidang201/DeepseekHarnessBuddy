@@ -102,7 +102,9 @@ inline OtaUpdateGate otaUpdateGate(
 ) {
   if (requireOfferCoordination) {
     if (!in.offerPending) return OTA_GATE_NO_OFFER;
+#if CODE_BUDDY_BLE_ENABLED
     if (!in.bleConnected) return OTA_GATE_DISCONNECTED;
+#endif
   }
   if (in.prompt || in.transfer || in.provisioning || in.passkey || in.functional)
     return OTA_GATE_CONFLICT;

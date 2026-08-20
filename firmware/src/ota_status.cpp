@@ -32,7 +32,9 @@ void writeStatus(
   );
   if (!length) return;
   Serial.write(reinterpret_cast<const uint8_t*>(payload), length);
+#if CODE_BUDDY_BLE_ENABLED
   bleWrite(reinterpret_cast<const uint8_t*>(payload), length);
+#endif
 }
 
 OtaStatusPhase phaseForView(const OtaUpdateView& view, const char** error) {

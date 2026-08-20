@@ -21,10 +21,27 @@ enum OtaBootReadyBit : uint8_t {
   OTA_BOOT_READY_EVENT_LOOP = 1U << 4,
 };
 
-constexpr uint8_t OTA_BOOT_READY_ALL =
-  OTA_BOOT_READY_DISPLAY | OTA_BOOT_READY_STORAGE |
-  OTA_BOOT_READY_BUTTONS | OTA_BOOT_READY_BLE |
-  OTA_BOOT_READY_EVENT_LOOP;
+// In a no-BLE build the OTA "boot ready" BLE bit is satisfied instead by a
+// live USB data line observed this boot. _lastLiveMs is authoritative in
+// main.cpp's translation unit, where otaBootReadyUsbDataSeen() is defined.
+uint8_t otaBootReadyUsbDataSeen(void);
+
+#if CODE_BUDDY_BLE_ENABLED
+  #define OTA_BOOT_READY_BLE_REQ (OTA_BOOT_READY_BLE)
+#else
+  #define OTA_BOOT_READY_BLE_REQ \
+    (otaBootReadyUsbDataSeen() ? (OTA_BOOT_READY_BLE) : 0)
+#endif
+
+// The full set of readiness bits required before a freshly flashed image is
+// confirmed. OTA_BOOT_READY_BLE_REQ collapses to the BLE bit (BLE builds) or
+// to the USB-data-seen condition (no-BLE builds). Evaluated at runtime because
+// the no-BLE value depends on whether a data line has been observed this boot.
+inline uint8_t otaBootReadyAllBits() {
+  return OTA_BOOT_READY_DISPLAY | OTA_BOOT_READY_STORAGE |
+         OTA_BOOT_READY_BUTTONS | OTA_BOOT_READY_BLE_REQ |
+         OTA_BOOT_READY_EVENT_LOOP;
+}
 
 enum OtaBootHealthReason : uint8_t {
   OTA_BOOT_REASON_NONE = 0,
@@ -173,7 +190,7 @@ inline void otaBootHealthSignal(
   OtaBootReadyBit bit
 ) {
   if (!state || state->phase != OTA_BOOT_PHASE_MONITORING) return;
-  state->readyBits |= static_cast<uint8_t>(bit) & OTA_BOOT_READY_ALL;
+  state->readyBits |= static_cast<uint8_t>(bit) & otaBootReadyAllBits();
 }
 
 inline void otaBootHealthFail(
@@ -199,7 +216,7 @@ inline OtaBootHealthAction otaBootHealthNextAction(
       state->phase = OTA_BOOT_PHASE_ROLLBACK;
       state->reason = OTA_BOOT_REASON_TIMEOUT;
       state->actionIssued = false;
-    } else if ((state->readyBits & OTA_BOOT_READY_ALL) == OTA_BOOT_READY_ALL) {
+    } else if ((state->readyBits & otaBootReadyAllBits()) == otaBootReadyAllBits()) {
       state->phase = OTA_BOOT_PHASE_MARK_VALID;
       state->actionIssued = true;
       return OTA_BOOT_ACTION_MARK_VALID;
