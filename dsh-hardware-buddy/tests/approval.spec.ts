@@ -15,6 +15,10 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     excludedTools: ['^MCP__danger_.*'],
     celebrateThreshold: 50000,
     entriesLimit: 5,
+    // P2-B: chime / time-sync knobs (defaults match config.ts)
+    chimeEnabled: true,
+    chimeMinIntervalMs: 8000,
+    timeSyncIntervalMs: 60000,
     logLevel: 'info',
     ...overrides,
   };
