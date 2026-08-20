@@ -106,7 +106,9 @@ inline bool xferCommand(JsonDocument& doc) {
   }
 
   if (strcmp(cmd, "unpair") == 0) {
+#if CODE_BUDDY_BLE_ENABLED
     bleClearBonds();
+#endif
     _xAck("unpair", true);
     return true;
   }
