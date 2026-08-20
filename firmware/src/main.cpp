@@ -2278,10 +2278,23 @@ static void denyPendingPrompt() {
 }
 
 // Air-gesture classifier gate (P2-A). Active ONLY while an approval is
-// pending: samples the gravity-subtracted accelerometer XY trace into a
-// ~900ms sliding window and consults gestureClassify() once the window
-// spans >= 700ms. Suppressed while the device lies flat on the desk
-// (gravity ~1g on Z) and locked for 1.5s after any recognition.
+// pending. Gesture plane depends on how the user holds the device; we
+// adapt at runtime using gravity. The product spec is: the user holds
+// the device screen-up and draws circles / X in the **plane of the
+// screen** (i.e. facing them — vertical plane), with the option to also
+// accept a screen-down / flat-palm draw on the desk.
+//
+// Mapping per posture (gravity on Z when flat, on Y when vertical):
+//   * vertical hold (|gy| dominant, |gz| small): screen-plane draw
+//     -> use (x, z) — X is left-right on screen, Z is toward/away
+//   * flat on desk (|gz| dominant, |gy| small): horizontal-plane draw
+//     -> use (x, y) — both axes are in the desk surface
+//
+// Flat-on-desk without any X/Y motion is treated as "device at rest"
+// and suppressed (the desk is not a user). Holding upright in either
+// orientation proceeds.
+//
+// Locked for 1.5s after any recognition.
 static void gesturePoll(uint32_t now, bool inPrompt, bool interactionAllowed) {
   static GesturePoint pts[128];
   static uint8_t n = 0;
@@ -2303,18 +2316,36 @@ static void gesturePoll(uint32_t now, bool inPrompt, bool interactionAllowed) {
   baseY += (ay - baseY) * 0.02f;
   baseZ += (az - baseZ) * 0.02f;
 
-  // Flat-on-desk suppression: gravity almost fully on Z means not held.
-  if (fabsf(baseZ) > 0.90f) {
-    n = 0;
-    return;
+  const float dx = ax - baseX;
+  const float dy = ay - baseY;
+  const float dz = az - baseZ;
+
+  // Posture decision from the (slow) gravity baselines. Decision is sticky
+  // for ~2s so a brief transition mid-gesture doesn't flip axes.
+  static float gzBaseLong = 0, gyBaseLong = 0;
+  gzBaseLong += (baseZ - gzBaseLong) * 0.01f;
+  gyBaseLong += (baseY - gyBaseLong) * 0.01f;
+  const bool verticalHold = fabsf(gyBaseLong) > fabsf(gzBaseLong);
+
+  if (verticalHold) {
+    // Trajectory axes: X (left-right on screen), Z (toward/away).
+    if (n < sizeof(pts) / sizeof(pts[0])) {
+      pts[n].x = dx;
+      pts[n].y = dz;
+      pts[n].tMs = now;
+      n++;
+    }
+  } else {
+    // Flat-on-desk: both X and Y are usable; require meaningful motion
+    // on at least one axis to consider the user actually drawing.
+    if (n < sizeof(pts) / sizeof(pts[0])) {
+      pts[n].x = dx;
+      pts[n].y = dy;
+      pts[n].tMs = now;
+      n++;
+    }
   }
 
-  if (n < sizeof(pts) / sizeof(pts[0])) {
-    pts[n].x = ax - baseX;
-    pts[n].y = ay - baseY;
-    pts[n].tMs = now;
-    n++;
-  }
   // Slide the window: drop samples older than 900ms.
   uint8_t stale = 0;
   while (stale < n && now - pts[stale].tMs > 900) stale++;
