@@ -161,8 +161,12 @@ describe('approvalRequestHook', () => {
     expect(await settled).toBe('cancelled');
   });
 
-  it('req.signal abort -> cancelled', async () => {
-    const h = makeHarness(makeConfig({ dangerousTools: ['fs\\.write'] }));
+  it('req.signal abort is NOT wired to settle (device owns cancellation)', async () => {
+    // Regression (live-verified): in headless mode the runtime aborts the
+    // request signal as soon as dsh's own approval timeout fires, which would
+    // clear the device prompt instantly. The plugin's approvalTimeout timer
+    // owns cancellation; an aborting signal must NOT settle.
+    const h = makeHarness(makeConfig({ dangerousTools: ['fs\\.write'], approvalTimeout: 50 }));
     const ac = new AbortController();
     const next = vi.fn();
     const p = h.bridge.approvalRequestHook(
@@ -170,6 +174,9 @@ describe('approvalRequestHook', () => {
       next,
     );
     ac.abort();
+    // still pending: the abort alone must not settle the approval
+    expect(h.sentPrompts).toHaveLength(1);
+    // the plugin's own timeout does
     expect(await p).toBe('cancelled');
   });
 

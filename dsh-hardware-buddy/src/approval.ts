@@ -164,10 +164,12 @@ export class ApprovalBridge {
           settle('cancelled');
         }, this.config.approvalTimeout);
 
-        const signal = req.signal as AbortSignal | undefined;
-        if (signal && typeof signal.addEventListener === 'function') {
-          signal.addEventListener('abort', () => settle('cancelled'), { once: true });
-        }
+        // NOTE: req.signal abort is intentionally NOT wired to settle().
+        // In headless mode the runtime aborts the request signal as soon as
+        // the approval timeout fires at the dsh layer (default 30s), which
+        // would clear the device prompt immediately. Our own approvalTimeout
+        // timer above owns the cancellation path instead, so the screen stays
+        // until the user acts or our timer fires.
 
         this.pending.set(id, { tool, settle });
         this.setWaiting(this.pending.size);

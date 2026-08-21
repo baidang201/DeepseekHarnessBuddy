@@ -38,7 +38,7 @@ enum class Clip : uint8_t {
   Count   = 6,
 };
 
-constexpr uint8_t CLIP_DEFAULT_MAX_VOLUME = 192;  // 192/255 ≈ 75% (PRD NFR1/3)
+constexpr uint8_t CLIP_DEFAULT_MAX_VOLUME = 230;  // 230/255 ≈ 90% (bumped from 192/75% on user feedback)
 
 // Sample rate of the bundled PCM data. keep in sync with audio_clips_data.h
 // generator (16 kHz mono) — the firmware passes this directly to Speaker.playRaw.

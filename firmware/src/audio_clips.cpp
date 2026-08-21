@@ -82,24 +82,25 @@ void audioClipsInit(uint8_t maxVolume) {
 
 void playClip(Clip c) {
   const size_t idx = (size_t)c;
-  if (idx >= (size_t)Clip::Count) return;
+  if (idx >= (size_t)Clip::Count) {
+    Serial.printf("[audio] playClip: idx %u >= Count\n", idx);
+    return;
+  }
   const ClipSlot& slot = kClipTable[idx];
-  if (!slot.data || slot.samples == 0) return;
+  if (!slot.data || slot.samples == 0) {
+    Serial.printf("[audio] playClip %u: no data (data=%p samples=%u)\n", idx, slot.data, slot.samples);
+    return;
+  }
+  Serial.printf("[audio] playClip %u: %u samples @ %uHz vol=%u\n",
+                idx, slot.samples, CLIP_SAMPLE_RATE_HZ, sVolume);
 
-  // Interrupt any in-progress clip on the Speaker — M5Unified treats
-  // repeat=1 + stop_current_sound=true as "kill whatever was playing, start
-  // this one immediately on a free channel". We pin channel 0 so clipPlaying()
-  // is meaningful and the loop can observe when the clip ends.
-  M5.Speaker.stop();  // belt-and-braces: flush before issuing the new clip
+  M5.Speaker.stop();
   M5.Speaker.setVolume(sVolume);
   M5.Speaker.playRaw(
     slot.data,
     slot.samples,
     CLIP_SAMPLE_RATE_HZ,
-    /*stereo=*/false,
-    /*repeat=*/1,
-    /*channel=*/0,
-    /*stop_current_sound=*/true
+    false, 1, 0, true
   );
 }
 
