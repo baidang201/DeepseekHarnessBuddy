@@ -18,15 +18,14 @@ A self-contained [deepseek-harness](https://github.com/deepseek-ai/deepseek-harn
 
 ---
 
-## Install (from GitHub)
+## Install (from GitHub Releases)
 
 ```bash
-dsh plugin --profile <name> add github:baidang201/dsh-hardware-buddy
-# pin to a commit for reproducibility (recommended):
-dsh plugin --profile <name> add github:baidang201/dsh-hardware-buddy#<commit-sha>
+dsh plugin --profile <name> add \
+  https://github.com/baidang201/DeepseekHarnessBuddy/releases/download/v0.1.0/dsh-hardware-buddy-dsh-hardware-buddy-0.1.0.tgz
 ```
 
-The package ships a `dsh.bundle` manifest (`cordis.patch.yml`) that dsh applies automatically. pnpm runs the package's `prepare` script on git install, which builds `dist/` from source.
+The package ships a `dsh.bundle` manifest (`cordis.patch.yml`) that dsh applies automatically. Pin to a specific release version by changing `v0.1.0` in the URL (a new version bumps the tarball name too).
 
 If you prefer to manage the entry by hand, add it to your profile patch (e.g. `$DSH_HOME/profiles/<name>/cordis.patch.yml` — this is also the file dsh's HMR watches):
 
