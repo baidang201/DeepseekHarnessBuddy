@@ -24,6 +24,14 @@
 
 > Building your own hardware client? See [firmware/REFERENCE.md](firmware/REFERENCE.md) for the BLE protocol and JSON payloads.
 
+## 🐾 DeepSeek Harness hardware pet (this repo, DSH edition)
+
+This repo has been extended into a **DeepSeek Harness** hardware pet — the StickS3 mirrors dsh agent state over USB CDC (BLE compiled out), with physical **A/B approval**, **air-gesture approval** (re-enabled when tuned), **cheerleader voice clips**, and an anime character pack.
+
+- **Host plugin** (standalone, installable): [baidang201/dsh-hardware-buddy](https://github.com/baidang201/dsh-hardware-buddy) — `dsh plugin add github:baidang201/dsh-hardware-buddy`
+- **Docs**: [PRD](prd.md) · [Tech](tech.md) · [Usage (中文)](USAGE.zh-CN.md) · [Phase-2 PRD](prd-p2.md) · [Phase-2 Tech](tech-p2.md)
+- **dsh integration**: zero source changes to `deepseek-ai/deepseek-harness`; verified live (state mirror, A/B + gesture approval, voice, character pack).
+
 ## What ships
 
 - A macOS bridge that pairs with the StickS3, syncs time, installs the native BLE helper, and manages the local `codex` shim.
