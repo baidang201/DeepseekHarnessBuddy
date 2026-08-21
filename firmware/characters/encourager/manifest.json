@@ -1,24 +1,19 @@
 {
-  "name": "encourager",
-  "colors": {
-    "body": "#4CAF50",
-    "bg": "#0E0E12",
-    "text": "#FFFFFF",
-    "textDim": "#9AA0A6",
-    "ink": "#0E0E12"
-  },
-  "states": {
-    "idle": [
-      "idle_0.gif",
-      "idle_1.gif",
-      "idle_2.gif",
-      "idle_3.gif"
-    ],
-    "sleep": "sleep.gif",
-    "busy": "busy.gif",
-    "attention": "attention.gif",
-    "dizzy": "dizzy.gif",
-    "celebrate": "celebrate.gif",
-    "heart": "heart.gif"
-  }
+    "name": "encourager",
+    "colors": {
+        "body": "#3F51B5",
+        "bg": "#FEFEF9",
+        "text": "#222222",
+        "textDim": "#888888",
+        "ink": "#FFFFFF"
+    },
+    "states": {
+        "sleep": "sleep.gif",
+        "idle": "idle.gif",
+        "busy": "busy.gif",
+        "attention": "attention.gif",
+        "celebrate": "celebrate.gif",
+        "dizzy": "dizzy.gif",
+        "heart": "heart.gif"
+    }
 }

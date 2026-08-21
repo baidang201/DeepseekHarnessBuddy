@@ -16,3 +16,5 @@ CB*.swift
 firmware/.pio/
 firmware/.sconsign*
 firmware/generated/ota-trust/
+# LittleFS staging (uploadfs sources; rebuilt by tools/flash_character.py)
+firmware/data/
