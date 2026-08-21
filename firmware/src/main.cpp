@@ -17,7 +17,7 @@
 #include "fonts/jetbrains_mono_ascii_8.h"
 #include "landscape_dashboard_logic.h"
 #include "completion_chime_logic.h"
-#include "gesture_recognizer.h"
+#include "gesture_recognizer.h"  // CODE_BUDDY_GESTURE_ENABLED gates gesturePoll below
 #include "data.h"
 #include "persona_logic.h"
 #include "utf8_text_logic.h"
@@ -2295,6 +2295,7 @@ static void denyPendingPrompt() {
 // orientation proceeds.
 //
 // Locked for 1.5s after any recognition.
+#if CODE_BUDDY_GESTURE_ENABLED
 static void gesturePoll(uint32_t now, bool inPrompt, bool interactionAllowed) {
   static GesturePoint pts[128];
   static uint8_t n = 0;
@@ -2369,6 +2370,8 @@ static void gesturePoll(uint32_t now, bool inPrompt, bool interactionAllowed) {
     }
   }
 }
+
+#endif  // CODE_BUDDY_GESTURE_ENABLED
 
 void loop() {
   // First safe point: timeouts and previously latched failures win before any
@@ -2453,7 +2456,9 @@ void loop() {
   // Shares the exact approve/deny paths with the A/B buttons.
   // inPrompt is computed further down in this loop pass; pass the local
   // predicate by reaching back to tama so we can sample before that.
+#if CODE_BUDDY_GESTURE_ENABLED
   gesturePoll(now, tama.promptId[0] && !responseSent, !menuOpen && !screenOff);
+#endif
 
   // BtnA: step through fake scenarios
   // Prompt arrival: beep, reset response flag

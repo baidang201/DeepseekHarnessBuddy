@@ -22,6 +22,13 @@
 
 #pragma once
 
+// Master switch for the air-gesture approval classifier (P2-A).
+// Default OFF: recognition was too twitchy (circle read as X) — disabled until
+// the recognizer is re-tuned. A/B buttons remain the approval path.
+#ifndef CODE_BUDDY_GESTURE_ENABLED
+#define CODE_BUDDY_GESTURE_ENABLED 0
+#endif
+
 #include <stddef.h>
 #include <stdint.h>
 
